@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="katex.min.css">
+<style>{{ css }}</style>
+</head>
+<body>
+
+<div class="watermark-layer">
+  {% if watermark_img %}
+    <img class="watermark" src="{{ watermark_img }}" style="opacity:{{ watermark.opacity or 0.15 }};width:{{ (watermark.scale or 0.4) * 100 }}%;transform:rotate({{ watermark.rotation or 0 }}deg)">
+  {% else %}
+    <div class="watermark-text">STUDIQUE</div>
+  {% endif %}
+</div>
+
+<div class="content">
+
+  <!-- ============ COVER ============ -->
+  <section class="cover">
+    <div class="cover-inner">
+      <img class="cover-logo" src="{{ logo_url or '' }}" alt="Studique">
+      <div class="cover-brand">STUDIQUE</div>
+      <div class="cover-sub">PREVIOUS YEAR QUESTIONS</div>
+      <div class="cover-title">{{ meta.bank_title }}</div>
+      <div class="cover-rule"></div>
+      <table class="meta-table">
+        <tr><td class="mt-label">Subject</td><td class="mt-value">{{ meta.subject_name }}{% if meta.subject_code %} ({{ meta.subject_code }}){% endif %}</td></tr>
+        <tr><td class="mt-label">Course</td><td class="mt-value">{{ meta.course }}</td></tr>
+        <tr><td class="mt-label">Semester</td><td class="mt-value">{{ meta.semester }}</td></tr>
+        <tr><td class="mt-label">Coverage</td><td class="mt-value">{{ meta.coverage }}</td></tr>
+        <tr><td class="mt-label">PYQ Years</td><td class="mt-value">{{ meta.years | join(', ') if meta.years else '—' }}</td></tr>
+        <tr><td class="mt-label">Questions</td><td class="mt-value">{{ stats.total_questions }} (Total marks: {{ stats.total_marks }})</td></tr>
+      </table>
+      <div class="cover-rule"></div>
+      <div class="cover-foot">Compiled from Previous Year Question Papers &middot; Studique</div>
+      {% if meta.notes %}<div class="cover-notes">{{ meta.notes }}</div>{% endif %}
+    </div>
+  </section>
+
+  <!-- ============ MARKS WEIGHTAGE PAGE ============ -->
+  <section class="weightage">
+    <h2 class="section-title">Marks Weightage</h2>
+    <p class="section-sub">Distribution of questions and marks across the question bank.</p>
+    <div class="weight-right">
+      <table class="weight-table">
+        <thead>
+          <tr><th>Section</th><th>No. of Questions</th><th>Marks</th></tr>
+        </thead>
+        <tbody>
+          {% for ps in stats.part_stats %}
+          <tr><td>{{ ps.part }}</td><td>{{ ps.count }}</td><td>{{ ps.marks }}</td></tr>
+          {% endfor %}
+          <tr class="wt-total"><td>Total</td><td>{{ stats.total_questions }}</td><td>{{ stats.total_marks }}</td></tr>
+        </tbody>
+      </table>
+      <div class="weight-note">Marks shown are the original per-question marks.</div>
+    </div>
+    {% if meta.instructions %}
+    <h3 class="weight-sub">General Instructions</h3>
+    <ul class="instr-list">
+      {% for ins in meta.instructions %}<li>{{ ins }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% if meta.exam_sessions %}
+    <h3 class="weight-sub">Papers Compiled</h3>
+    <ul class="instr-list">
+      {% for s in meta.exam_sessions %}<li>{{ s }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
+  <!-- ============ QUESTIONS ============ -->
+  {% for group in groups %}
+  <section class="group">
+    <div class="group-title">{{ group.title }}</div>
+    {% for q in group.questions %}
+    <div class="question">
+      <div class="q-head">
+        <span class="q-num">{{ q.numbering }}.</span>
+        {% if q.text %}<span class="q-text">{{ q.text }}</span>{% endif %}
+        {% if q.marks %}<span class="q-marks">{{ q.marks }} Mark{{ 's' if q.marks != 1 }}</span>{% endif %}
+      </div>
+      {% if q.options %}
+      <ol class="options">
+        {% for o in q.options %}<li>{{ o }}</li>{% endfor %}
+      </ol>
+      {% endif %}
+      {% if q.subs %}
+      <div class="subs">
+        {% for s in q.subs %}
+          {% if s.is_or_alternative and not loop.first %}<div class="or-divider">OR</div>{% endif %}
+          <div class="sub">
+            <span class="sub-label">{{ s.label or '' }}</span>
+            <span class="sub-text">{{ s.text }}</span>
+            {% if s.marks %}<span class="sub-marks">({{ s.marks }})</span>{% endif %}
+          </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if q.media_ids %}
+      <div class="q-media">
+        {% for mid in q.media_ids %}
+          {% if mid in media_map %}
+          <figure class="media-fig">
+            <img class="q-img" src="{{ media_map[mid].orig_url }}" alt="Figure">
+            {% if media_map[mid].caption %}<figcaption>{{ media_map[mid].caption }}</figcaption>{% endif %}
+          </figure>
+          {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+      <div class="q-source">[Source: {{ q.source_label }}{% if q._repeat_count == 1 and q.document.year and (q.document.year|string) not in q.source_label %} &middot; {{ q.document.year }}{% endif %}]</div>
+    </div>
+    {% endfor %}
+  </section>
+  {% endfor %}
+
+  <footer class="page-footer"></footer>
+</div>
+
+<script src="katex.min.js"></script>
+<script src="auto-render.min.js"></script>
+</body>
+</html>

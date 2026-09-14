@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studique QBGen</title>
+<style>
+:root {
+  --bg: #0f0f0f; --panel: #181a1b; --panel2: #1f2123; --border: #2a2c2e;
+  --text: #e8e8ea; --muted: #9aa0a6; --accent: #fe6e00; --accent-soft: #2a1a0e;
+  --green: #22c55e; --red: #ef4444; --amber: #f59e0b; --blue: #3b82f6;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+a { color: var(--accent); text-decoration: none; }
+.topbar { display: flex; align-items: center; gap: 12px; padding: 10px 20px; background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 20; }
+.logo { display: flex; align-items: center; gap: 8px; font-weight: 800; letter-spacing: .12em; color: var(--accent); font-size: 15px; }
+.logo img { width: 22px; height: 22px; border-radius: 5px; }
+.topbar .spacer { flex: 1; }
+.tab { padding: 8px 16px; border-radius: 8px; cursor: pointer; color: var(--muted); font-weight: 600; border: 1px solid transparent; }
+.tab:hover { color: var(--text); }
+.tab.active { background: var(--accent-soft); color: var(--accent); border-color: #fe6e0044; }
+.container { padding: 20px; max-width: 1400px; margin: 0 auto; }
+.hidden { display: none !important; }
+.btn { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel2); color: var(--text); cursor: pointer; font-weight: 600; font-size: 13px; }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { filter: brightness(1.1); color: #fff; }
+.btn.green { background: #16a34a33; border-color: #22c55e88; color: #4ade80; }
+.btn.red { background: #ef444422; border-color: #ef444488; color: #f87171; }
+.btn.small { padding: 4px 10px; font-size: 12px; }
+input, textarea, select { background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; width: 100%; }
+textarea { resize: vertical; }
+label { font-size: 12px; color: var(--muted); display: block; margin: 10px 0 4px; font-weight: 600; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.card h2 { margin: 0 0 12px; font-size: 15px; }
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.row.top { align-items: flex-start; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid3 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+.col { min-width: 0; }
+.badge { padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.badge.done { background: #22c55e22; color: #4ade80; }
+.badge.pending { background: #f59e0b22; color: var(--amber); }
+.badge.processing { background: #3b82f622; color: #60a5fa; }
+.badge.error { background: #ef444422; color: #f87171; }
+.badge.review { background: #f59e0b22; color: var(--amber); }
+.badge.approved { background: #22c55e22; color: #4ade80; }
+.badge.rejected { background: #ef444422; color: #f87171; }
+.doc-item { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; background: var(--panel2); cursor: pointer; }
+.doc-item:hover { border-color: var(--accent); }
+.doc-item.selected { border-color: var(--accent); background: var(--accent-soft); }
+.q-item { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; cursor: pointer; background: var(--panel2); }
+.q-item:hover { border-color: var(--accent); }
+.q-item.selected { border-color: var(--accent); background: var(--accent-soft); }
+.q-item .qnum { font-weight: 800; color: var(--accent); }
+.q-item .qmeta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+.flag { font-size: 11px; color: var(--amber); background: #f59e0b11; border: 1px solid #f59e0b44; border-radius: 6px; padding: 2px 8px; margin: 3px 0; display: block; }
+.media-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.media-thumb { position: relative; width: 110px; border: 2px solid var(--border); border-radius: 8px; overflow: hidden; cursor: pointer; background: #fff; }
+.media-thumb img { width: 100%; height: 70px; object-fit: contain; display: block; }
+.media-thumb.attached { border-color: var(--accent); }
+.media-thumb .tag { position: absolute; top: 3px; left: 3px; background: #000c; color: #fff; font-size: 9px; padding: 1px 5px; border-radius: 4px; }
+.page-view { margin-top: 12px; }
+.page-view img { width: 100%; border: 1px solid var(--border); border-radius: 8px; }
+.page-select { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.page-btn { padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel2); color: var(--muted); cursor: pointer; font-size: 12px; }
+.page-btn.active { border-color: var(--accent); color: var(--accent); }
+.sub-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.sub-row input { flex: 1; }
+.sub-row .lbl { max-width: 60px; }
+.sub-row .mk { max-width: 60px; }
+.sub-row .orbox { max-width: 90px; display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.opt-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.status-line { color: var(--muted); font-size: 12px; }
+.status-line b { color: var(--text); }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; background: var(--panel2); border: 1px solid var(--border); margin-right: 6px; margin-bottom: 4px; }
+.dropzone { border: 2px dashed var(--border); border-radius: 12px; padding: 24px; text-align: center; color: var(--muted); cursor: pointer; }
+.dropzone:hover { border-color: var(--accent); color: var(--text); }
+input[type=file] { display: none; }
+.toast { position: fixed; bottom: 20px; right: 20px; background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 18px; z-index: 100; box-shadow: 0 8px 30px #000a; }
+.toast.ok { border-color: var(--green); }
+.toast.err { border-color: var(--red); }
+pre.json { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 11px; overflow: auto; max-height: 400px; }
+.bank-item { display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; background: var(--panel2); }
+.mono { font-family: ui-monospace, Consolas, monospace; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo"><img src="/files/assets/studique-logo.png" onerror="this.style.display='none'"><span>STUDIQUE&nbsp;QBGEN</span></div>
+  <div class="spacer"></div>
+  <div class="tab active" data-tab="collections">Collections</div>
+  <div class="tab" data-tab="review">Review</div>
+  <div class="tab" data-tab="generate">Generate</div>
+  <div class="tab" data-tab="jobs">Jobs</div>
+</div>
+
+<div class="container">
+
+  <!-- ================= COLLECTIONS ================= -->
+  <div id="tab-collections" class="tab-pane">
+    <div class="grid2">
+      <div class="card">
+        <h2>Collections</h2>
+        <div class="row" style="margin-bottom:12px">
+          <input id="new-col-name" placeholder="Collection name (e.g. ACCA PYQs)" style="flex:1">
+          <button class="btn primary" onclick="createCollection()">Create</button>
+        </div>
+        <div id="collection-list"></div>
+      </div>
+      <div class="card">
+        <h2 id="col-title">Upload Question Papers</h2>
+        <div class="dropzone" onclick="document.getElementById('file-input').click()">
+          <p><b>Click to select PYQ PDFs</b><br>Multiple files allowed</p>
+        </div>
+        <input type="file" id="file-input" multiple accept=".pdf">
+        <div id="upload-status" class="status-line" style="margin-top:10px"></div>
+        <div id="docs-list" style="margin-top:14px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= REVIEW ================= -->
+  <div id="tab-review" class="tab-pane hidden">
+    <div class="grid3">
+      <div class="col">
+        <div class="card">
+          <h2>Documents</h2>
+          <select id="rv-doc-select"></select>
+          <div id="rv-docs" style="margin-top:12px"></div>
+        </div>
+      </div>
+      <div class="col" style="grid-column: span 2">
+        <div class="card" id="rv-qlist-card">
+          <h2>Questions <span id="rv-qcount" class="pill"></span></h2>
+          <div id="rv-qlist"></div>
+        </div>
+        <div class="card" id="rv-detail-card">
+          <div id="rv-detail"></div>
+          <div id="rv-page" class="page-view"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= GENERATE ================= -->
+  <div id="tab-generate" class="tab-pane hidden">
+    <div class="grid2">
+      <div class="card">
+        <h2>Question Bank Configuration</h2>
+        <label>Collection</label>
+        <select id="gen-collection"></select>
+        <label>Bank Title</label>
+        <input id="gen-title" placeholder="QUESTION BANK">
+        <label>Subject Name (override, blank = auto-detect)</label>
+        <input id="gen-subject-name">
+        <label>Subject Code (override)</label>
+        <input id="gen-subject-code">
+        <label>Course</label>
+        <input id="gen-course" placeholder="B.Tech / M.Tech">
+        <label>Semester</label>
+        <input id="gen-semester">
+        <label>Coverage (e.g. All Units)</label>
+        <input id="gen-coverage" value="All Units">
+        <label>Group Questions By</label>
+        <select id="gen-group">
+          <option value="part">Part (A/B/C)</option>
+          <option value="year">Year</option>
+          <option value="type">Question Type</option>
+          <option value="none">Single List</option>
+        </select>
+        <label>Notes / Instructions</label>
+        <textarea id="gen-notes" rows="2"></textarea>
+        <label>Watermark image (optional override)</label>
+        <input id="gen-wm-image" placeholder="assets/studique-logo.png">
+        <div style="margin-top:16px" class="row">
+          <button class="btn primary" onclick="generateBank()">Generate Question Bank</button>
+          <button class="btn" onclick="generateAnswers()">Generate Answers</button>
+          <button class="btn" onclick="generateAnswerKey()">Generate Answer Key PDF</button>
+        </div>
+        <div id="gen-status" class="status-line" style="margin-top:10px"></div>
+      </div>
+      <div class="card">
+        <h2>Generated Banks</h2>
+        <div id="bank-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= JOBS ================= -->
+  <div id="tab-jobs" class="tab-pane hidden">
+    <div class="card">
+      <h2>Processing Jobs</h2>
+      <div id="jobs-list"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

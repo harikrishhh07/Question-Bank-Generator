@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic
+pydantic-settings
+pymupdf
+pillow
+numpy
+opencv-python-headless
+pytesseract
+openai
+jinja2
+python-multipart
+playwright

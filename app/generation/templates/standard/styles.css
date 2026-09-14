@@ -1,0 +1,181 @@
+@page {
+  size: A4;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 11pt;
+  color: #1a1a1a;
+  line-height: 1.5;
+}
+
+/* ---------- WATERMARK (fixed => repeats on every printed page, behind content) ---------- */
+.watermark-layer {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.watermark {
+  opacity: 0.15;
+  width: 40%;
+  transform: rotate(0deg);
+}
+.watermark-text {
+  opacity: 0.05;
+  font-size: 64pt;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  color: #fe6e00;
+}
+
+.content { position: relative; z-index: 1; }
+
+/* ---------- COVER ---------- */
+.cover {
+  page-break-after: always;
+  display: flex;
+  min-height: 255mm;
+}
+.cover-inner {
+  width: 100%;
+  margin: auto 0;
+  text-align: center;
+}
+.cover-logo { width: 26mm; height: 26mm; margin: 0 auto 6mm auto; display: block; }
+.cover-brand {
+  font-size: 20pt; font-weight: 800; letter-spacing: 0.35em; color: #fe6e00;
+}
+.cover-sub {
+  font-size: 10pt; letter-spacing: 0.28em; color: #666; margin-top: 2mm; font-weight: 600;
+}
+.cover-title {
+  font-size: 30pt; font-weight: 800; color: #111; margin: 14mm 0 10mm 0; line-height: 1.15;
+}
+.cover-rule {
+  width: 60mm; height: 1mm; background: #fe6e00; margin: 8mm auto;
+  border-radius: 1mm;
+}
+.meta-table {
+  margin: 0 auto;
+  border-collapse: collapse;
+  text-align: left;
+}
+.meta-table td { padding: 2.2mm 4mm; vertical-align: top; }
+.mt-label { font-weight: 700; color: #fe6e00; white-space: nowrap; letter-spacing: 0.03em; }
+.mt-value { color: #222; font-weight: 500; }
+.cover-foot { margin-top: 10mm; color: #888; font-size: 9.5pt; }
+.cover-notes { margin-top: 6mm; color: #555; font-size: 10pt; font-style: italic; }
+
+/* ---------- WEIGHTAGE ---------- */
+.weightage { page-break-after: always; }
+.section-title {
+  font-size: 17pt; font-weight: 800; color: #111;
+  border-left: 2.5mm solid #fe6e00; padding-left: 4mm; margin: 4mm 0 2mm 0;
+}
+.section-sub { color: #666; margin: 0 0 6mm 0; }
+.weight-right {
+  float: right;
+  width: 62%;
+  margin-left: 8mm;
+  margin-bottom: 4mm;
+}
+.weight-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 0.4mm solid #fe6e00;
+  border-radius: 2mm;
+  overflow: hidden;
+}
+.weight-table th, .weight-table td {
+  border-bottom: 0.3mm solid #eecfb0;
+  padding: 2.5mm 4mm;
+  text-align: left;
+  font-size: 10pt;
+}
+.weight-table th { background: #fff4ec; color: #b34d00; text-transform: uppercase; font-size: 9pt; letter-spacing: 0.06em; }
+.wt-total td { font-weight: 800; background: #fff4ec; border-top: 0.5mm solid #fe6e00; }
+.weight-note { font-size: 9pt; color: #888; margin-top: 3mm; }
+.weight-sub { font-size: 11.5pt; font-weight: 700; color: #b34d00; margin-top: 6mm; }
+.instr-list { margin: 2mm 0; padding-left: 6mm; color: #333; }
+.instr-list li { margin-bottom: 1.5mm; }
+
+/* ---------- GROUP / QUESTIONS ---------- */
+.group { page-break-before: always; }
+.group-title {
+  font-size: 13pt; font-weight: 800; color: #111;
+  background: #fff4ec;
+  border: 0.4mm solid #fe6e00;
+  border-radius: 2mm;
+  padding: 2mm 4mm;
+  margin-bottom: 4mm;
+  line-height: 1.3;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.group-count { font-size: 9.5pt; font-weight: 600; color: #b34d00; }
+
+.question {
+  margin-bottom: 5mm;
+  padding: 3mm 3mm 3mm 4mm;
+  border-left: 1.2mm solid #fe6e00;
+  background: #fcfcfc;
+  border-radius: 0 2mm 2mm 0;
+  page-break-inside: avoid;
+}
+.q-head { display: flex; align-items: flex-start; gap: 3mm; page-break-after: avoid; }
+.q-num { font-weight: 800; font-size: 12pt; color: #b34d00; flex-shrink: 0; line-height: 1.5; }
+.q-marks {
+  margin-left: auto; flex-shrink: 0; align-self: flex-start;
+  font-size: 9pt; font-weight: 700; color: #fff; background: #fe6e00;
+  padding: 0.6mm 2.5mm; border-radius: 1mm; white-space: nowrap;
+}
+.q-orig {
+  font-size: 8.5pt; color: #888; font-weight: 600;
+  border: 0.3mm solid #ddd; border-radius: 1mm; padding: 0.4mm 2mm;
+}
+.q-text { flex: 1; min-width: 0; page-break-inside: auto; }
+.q-text :first-child { margin-top: 0; }
+
+.options {
+  margin: 2mm 0 0 0; padding-left: 6mm; list-style: none;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1mm 6mm;
+}
+.options li { padding: 0.5mm 0; }
+
+.subs { margin-top: 2.5mm; }
+.sub { display: flex; align-items: flex-start; gap: 2mm; margin: 1mm 0 1mm 0; padding-left: 2mm; page-break-inside: avoid; }
+.sub-label { font-weight: 700; color: #b34d00; flex-shrink: 0; }
+.sub-text { flex: 1; min-width: 0; }
+.sub-marks { margin-left: auto; flex-shrink: 0; color: #888; font-size: 9.5pt; }
+.or-divider {
+  font-weight: 800; font-size: 10pt; color: #fe6e00;
+  margin: 2mm 0; letter-spacing: 0.2em; text-align: center;
+}
+
+.q-media { margin-top: 3mm; }
+.media-fig { margin: 0; page-break-inside: avoid; text-align: center; }
+.q-img {
+  max-width: 100%;
+  max-height: 80mm;
+  object-fit: contain;
+  border: 0.3mm solid #eee;
+  border-radius: 1mm;
+  padding: 1mm;
+  background: #fff;
+}
+.media-fig figcaption { font-size: 9pt; color: #888; margin-top: 1mm; }
+
+.q-source { margin-top: 2mm; font-size: 8pt; color: #aaa; }
+
+/* long question: allow breaking so it doesn't overflow */
+.question.long { page-break-inside: auto; }
+
