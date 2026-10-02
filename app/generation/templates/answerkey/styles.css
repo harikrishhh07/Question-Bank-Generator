@@ -11,9 +11,11 @@ html, body {
   pointer-events: none;
 }
 .watermark { opacity: 0.15; width: 40%; }
+.watermark-text { opacity: 0.05; font-size: 60pt; font-weight: 800;
+  letter-spacing: .3em; color: #fe6e00; }
 .content { position: relative; z-index: 1; }
 
-/* ---------- COVER ---------- */
+/* ── COVER ── */
 .cover { page-break-after: always; display: flex; min-height: 255mm; }
 .cover-inner { width: 100%; margin: auto 0; text-align: center; }
 .cover-logo { width: 26mm; height: 26mm; margin: 0 auto 6mm; display: block; }
@@ -26,8 +28,9 @@ html, body {
 .mt-label { font-weight: 700; color: #fe6e00; white-space: nowrap; letter-spacing: .03em; }
 .mt-value { color: #222; font-weight: 500; }
 .cover-foot { margin-top: 8mm; color: #888; font-size: 9.5pt; }
+.cover-notes { margin-top: 4mm; color: #555; font-size: 10pt; font-style: italic; }
 
-/* ---------- GROUP ---------- */
+/* ── GROUP ── */
 .group { page-break-before: always; }
 .group-title {
   font-size: 13pt; font-weight: 800; color: #111;
@@ -35,24 +38,72 @@ html, body {
   padding: 2mm 4mm; margin-bottom: 4mm; line-height: 1.3;
 }
 
-/* ---------- QUESTION + ANSWER ---------- */
-.qa {
-  margin-bottom: 4mm; padding: 2.5mm 3mm 2.5mm 4mm;
-  border-left: 1.2mm solid #fe6e00; background: #fcfcfc;
+/* ── QA BLOCK ── */
+.qa-block {
+  margin-bottom: 5mm;
+  padding: 3mm 3mm 3mm 4mm;
+  border-left: 1.2mm solid #fe6e00;
+  background: #fafafa;
   border-radius: 0 2mm 2mm 0;
   page-break-inside: avoid;
 }
-.q-head { display: flex; align-items: flex-start; gap: 2mm; }
-.q-num { font-weight: 800; font-size: 11pt; color: #b34d00; flex-shrink: 0; white-space: nowrap; }
-.q-text { flex: 1; min-width: 0; font-size: 10pt; color: #333; }
-.q-marks { margin-left: auto; flex-shrink: 0; font-size: 8pt; font-weight: 700; color: #fff;
-  background: #fe6e00; padding: 0.4mm 2mm; border-radius: 1mm; white-space: nowrap; }
-.q-opts { margin-top: 1mm; padding-left: 4mm; font-size: 9pt; color: #555; }
-.q-subs { margin-top: 1mm; padding-left: 4mm; font-size: 9pt; color: #555; }
-.q-sub { display: block; margin: 0.3mm 0; }
 
-.correct-opt { margin-top: 2mm; font-size: 10pt; font-weight: 700; color: #1a7f37; }
-.steps { margin-top: 1.5mm; padding-left: 2mm; }
-.step { margin: 0.5mm 0; font-size: 10pt; line-height: 1.45; }
-.final-ans { margin-top: 1.5mm; font-weight: 700; font-size: 10.5pt; color: #b34d00; }
-.no-ans { margin-top: 2mm; font-style: italic; color: #999; font-size: 9pt; }
+/* Question header */
+.q-head { display: flex; align-items: flex-start; gap: 2.5mm; margin-bottom: 1mm; }
+.q-num { font-weight: 800; font-size: 11.5pt; color: #b34d00; flex-shrink: 0; line-height: 1.5; }
+.q-text { flex: 1; min-width: 0; font-size: 10.5pt; color: #222; }
+.q-marks {
+  margin-left: auto; flex-shrink: 0; align-self: flex-start;
+  font-size: 8pt; font-weight: 700; color: #fff;
+  background: #fe6e00; padding: 0.5mm 2.5mm; border-radius: 1mm; white-space: nowrap;
+}
+
+/* Options */
+.q-opts {
+  padding-left: 5mm; margin: 1mm 0;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.5mm 6mm;
+  font-size: 9.5pt; color: #444;
+}
+.opt { padding: 0.3mm 0; }
+
+/* Subs */
+.q-subs { padding-left: 5mm; margin: 1mm 0; font-size: 9.5pt; color: #444; }
+.q-sub { margin: 0.5mm 0; display: flex; gap: 2mm; align-items: flex-start; }
+.sub-lbl { font-weight: 700; color: #b34d00; flex-shrink: 0; }
+.sub-txt { flex: 1; }
+.sub-mk { flex-shrink: 0; color: #888; font-size: 9pt; }
+.or-bar { font-weight: 800; font-size: 9pt; color: #fe6e00; letter-spacing: .15em;
+  text-align: center; margin: 1.5mm 0 1mm; }
+
+/* ── ANSWER BLOCK ── */
+.answer-block {
+  margin-top: 2.5mm;
+  padding: 2.5mm 3mm;
+  background: #f0f7ff;
+  border: .3mm solid #3b82f655;
+  border-radius: 1.5mm;
+}
+.ans-label {
+  font-size: 8.5pt; font-weight: 700; color: #2563eb;
+  letter-spacing: .06em; text-transform: uppercase; margin-bottom: 1.5mm;
+}
+.correct-opt {
+  font-size: 10pt; font-weight: 700; color: #15803d; margin-bottom: 1.5mm;
+}
+.steps { }
+.step {
+  display: flex; gap: 2mm; align-items: flex-start;
+  margin: 1mm 0; font-size: 10pt; line-height: 1.5;
+}
+.step-n { font-weight: 700; color: #3b82f6; flex-shrink: 0; min-width: 12pt; }
+.step-txt { flex: 1; }
+.final-ans {
+  margin-top: 2mm;
+  font-weight: 700; font-size: 10.5pt; color: #b34d00;
+  border-top: .3mm solid #fe6e0055; padding-top: 1.5mm;
+}
+.no-ans {
+  margin-top: 2mm; font-style: italic;
+  color: #f59e0b; font-size: 9pt;
+  background: #fef3c7; padding: 1.5mm 3mm; border-radius: 1mm;
+}

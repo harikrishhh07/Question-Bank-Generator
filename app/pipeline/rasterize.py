@@ -17,7 +17,7 @@ def ingest_pdf(src_path: Path, document_id: int) -> list[dict]:
         for i in range(doc.page_count):
             page = doc[i]
             rect = page.rect
-            pix = page.get_pixmap(dpi=200)
+            pix = page.get_pixmap(dpi=250)
             key = f"docs/{document_id}/render_p{i}.png"
             data = pix.tobytes("png")
             storage.put_bytes(key, data)

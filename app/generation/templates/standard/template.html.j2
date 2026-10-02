@@ -79,12 +79,12 @@
     <div class="question">
       <div class="q-head">
         <span class="q-num">{{ q.numbering }}.</span>
-        {% if q.text %}<span class="q-text">{{ q.text }}</span>{% endif %}
+        {% if q.text %}<span class="q-text">{{ q.text | safe }}</span>{% endif %}
         {% if q.marks %}<span class="q-marks">{{ q.marks }} Mark{{ 's' if q.marks != 1 }}</span>{% endif %}
       </div>
       {% if q.options %}
       <ol class="options">
-        {% for o in q.options %}<li>{{ o }}</li>{% endfor %}
+        {% for o in q.options %}<li>{{ o | safe }}</li>{% endfor %}
       </ol>
       {% endif %}
       {% if q.subs %}
@@ -93,7 +93,7 @@
           {% if s.is_or_alternative and not loop.first %}<div class="or-divider">OR</div>{% endif %}
           <div class="sub">
             <span class="sub-label">{{ s.label or '' }}</span>
-            <span class="sub-text">{{ s.text }}</span>
+            <span class="sub-text">{{ s.text | safe }}</span>
             {% if s.marks %}<span class="sub-marks">({{ s.marks }})</span>{% endif %}
           </div>
         {% endfor %}
@@ -122,5 +122,19 @@
 
 <script src="katex.min.js"></script>
 <script src="auto-render.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "\\(", right: "\\)", display: false},
+        {left: "\\[", right: "\\]", display: true},
+        {left: "$$", right: "$$", display: true},
+        {left: "$", right: "$", display: false}
+      ],
+      throwOnError: false,
+      errorColor: "#cc0000"
+    });
+  });
+</script>
 </body>
 </html>

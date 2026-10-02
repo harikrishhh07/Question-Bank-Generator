@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 
 LABEL_RE = re.compile(r"^\s*(\(?[a-zA-Z][a-zA-Z0-9.]*\)?[\.\)])\s*(.*)$", re.S)
@@ -16,34 +18,316 @@ _MATH_CHAR_RE = re.compile(r"\\[a-zA-Z]+|[{}_^]|[∫∑√π∞∇×±−]")
 _MATH_TOKEN_RE = re.compile(r"[\\{}_^]|∫|∑|√|π|∞|∇|×|±")
 
 
-def wrap_bare_math(text: str) -> str:
-    """Wrap bare LaTeX runs in \\( ... \\) so KaTeX renders them.
+# ---- Unicode math symbol → LaTeX command map ----
+_UNICODE_MATH_MAP = [
+    # Greek letters
+    ("α", r"\alpha"), ("β", r"\beta"), ("γ", r"\gamma"), ("δ", r"\delta"),
+    ("ε", r"\epsilon"), ("ζ", r"\zeta"), ("η", r"\eta"), ("θ", r"\theta"),
+    ("ι", r"\iota"), ("κ", r"\kappa"), ("λ", r"\lambda"), ("μ", r"\mu"),
+    ("ν", r"\nu"), ("ξ", r"\xi"), ("π", r"\pi"), ("ρ", r"\rho"),
+    ("σ", r"\sigma"), ("τ", r"\tau"), ("υ", r"\upsilon"), ("φ", r"\phi"),
+    ("χ", r"\chi"), ("ψ", r"\psi"), ("ω", r"\omega"),
+    ("Γ", r"\Gamma"), ("Δ", r"\Delta"), ("Θ", r"\Theta"), ("Λ", r"\Lambda"),
+    ("Ξ", r"\Xi"), ("Π", r"\Pi"), ("Σ", r"\Sigma"), ("Υ", r"\Upsilon"),
+    ("Φ", r"\Phi"), ("Ψ", r"\Psi"), ("Ω", r"\Omega"),
+    # Operators
+    ("×", r"\times"), ("÷", r"\div"), ("±", r"\pm"), ("∓", r"\mp"),
+    ("·", r"\cdot"), ("∘", r"\circ"), ("⊗", r"\otimes"), ("⊕", r"\oplus"),
+    # Relations
+    ("≤", r"\leq"), ("≥", r"\geq"), ("≠", r"\neq"), ("≈", r"\approx"),
+    ("≡", r"\equiv"), ("∝", r"\propto"), ("∼", r"\sim"), ("≅", r"\cong"),
+    # Calculus / analysis
+    ("∫", r"\int"), ("∬", r"\iint"), ("∭", r"\iiint"),
+    ("∑", r"\sum"), ("∏", r"\prod"),
+    ("∂", r"\partial"), ("∇", r"\nabla"), ("∆", r"\Delta"),
+    ("√", r"\sqrt"), ("∞", r"\infty"),
+    # Logic / sets
+    ("∈", r"\in"), ("∉", r"\notin"), ("⊂", r"\subset"), ("⊃", r"\supset"),
+    ("⊆", r"\subseteq"), ("⊇", r"\supseteq"), ("∩", r"\cap"), ("∪", r"\cup"),
+    ("∅", r"\emptyset"), ("∀", r"\forall"), ("∃", r"\exists"),
+    ("∧", r"\wedge"), ("∨", r"\vee"), ("¬", r"\neg"),
+    # Arrows
+    ("→", r"\rightarrow"), ("←", r"\leftarrow"), ("↔", r"\leftrightarrow"),
+    ("⇒", r"\Rightarrow"), ("⇐", r"\Leftarrow"), ("⇔", r"\Leftrightarrow"),
+    ("↑", r"\uparrow"), ("↓", r"\downarrow"),
+    # Misc
+    ("°", r"^{\circ}"), ("′", r"'"), ("″", r"''"),
+    ("ℝ", r"\mathbb{R}"), ("ℤ", r"\mathbb{Z}"), ("ℕ", r"\mathbb{N}"),
+    ("ℂ", r"\mathbb{C}"), ("ℚ", r"\mathbb{Q}"),
+    ("−", r"-"),  # en-dash used as minus → ASCII minus
+]
 
-    Leaves already-delimited math untouched. Operates token-by-token so plain
-    words in mixed sentences are not rendered as math.
+# Pattern that detects whether a string contains Unicode math that needs conversion
+_UNICODE_MATH_CHARS = re.compile(
+    r"[αβγδεζηθικλμνξπρστυφχψωΓΔΘΛΞΠΣΥΦΨΩ×÷±∓·∘⊗⊕≤≥≠≈≡∝∼≅∫∬∭∑∏∂∇√∞∈∉⊂⊃⊆⊇∩∪∅∀∃∧∨¬→←↔⇒⇐⇔↑↓°ℝℤℕℂℚ−]"
+)
+
+
+def unicode_math_to_latex(text: str) -> str:
+    """Convert Unicode math symbols in text to their LaTeX equivalents.
+
+    Only converts symbols that appear outside already-delimited math spans,
+    so \\(\\pi\\) is left alone but bare π → \\pi.
     """
-    if not text or "\\(" in text or "\\[" in text:
-        return text
-    if not re.search(r"\\[a-zA-Z]+", text):
+    if not text or not _UNICODE_MATH_CHARS.search(text):
         return text
 
-    tokens = text.split(" ")
-    out: list[str] = []
-    buf: list[str] = []
-
-    def flush() -> None:
-        if buf:
-            out.append("\\(" + " ".join(buf) + "\\)")
-            buf.clear()
-
-    for tok in tokens:
-        if _MATH_TOKEN_RE.search(tok):
-            buf.append(tok)
+    # Split into math-delimited regions and plain regions, process plain only.
+    # Handles \(...\) and \[...\] delimiters.
+    parts: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        for delim_open, delim_close in (("\\(", "\\)"), ("\\[", "\\]")):
+            if text.startswith(delim_open, i):
+                end = text.find(delim_close, i + len(delim_open))
+                if end != -1:
+                    parts.append(text[i : end + len(delim_close)])
+                    i = end + len(delim_close)
+                    break
         else:
-            flush()
-            out.append(tok)
-    flush()
-    return " ".join(out)
+            parts.append(text[i])
+            i += 1
+
+    result_parts: list[str] = []
+    for part in parts:
+        if part.startswith("\\(") or part.startswith("\\["):
+            result_parts.append(part)  # inside math — leave as-is
+        else:
+            for uni, latex in _UNICODE_MATH_MAP:
+                part = part.replace(uni, latex)
+            result_parts.append(part)
+
+    converted = "".join(result_parts)
+
+    # Now wrap any newly-created bare LaTeX commands (from the unicode conversion)
+    # that are not yet inside delimiters.
+    return _wrap_latex_outside_delimiters(converted)
+
+
+def _wrap_latex_outside_delimiters(text: str) -> str:
+    """Wrap contiguous LaTeX math runs outside existing \\(...\\) / \\[...\\] in \\(...\\).
+
+    A "math run" is a maximal span of tokens where each token either:
+      - starts with a backslash followed by a letter (LaTeX command), or
+      - contains only math-valid characters: digits, operators +-=/<>*/^_{}|., braces
+        and no whitespace (a "math atom").
+    Plain words between runs break the run.
+    """
+    if not text:
+        return text
+
+    # Already fully delimited? skip.
+    if not re.search(r"\\[a-zA-Z]", text):
+        return text
+
+    # Walk character-by-character, tracking regions
+    segments: list[tuple[bool, str]] = []  # (is_delimited, content)
+    i, n = 0, len(text)
+
+    while i < n:
+        # Check if we're entering a delimited math region
+        matched_delim = False
+        for open_d, close_d in (("\\(", "\\)"), ("\\[", "\\]")):
+            if text.startswith(open_d, i):
+                end = text.find(close_d, i + len(open_d))
+                if end != -1:
+                    segments.append((True, text[i : end + len(close_d)]))
+                    i = end + len(close_d)
+                    matched_delim = True
+                    break
+        if matched_delim:
+            continue
+        # Accumulate plain text
+        j = i + 1
+        while j < n:
+            for open_d, _ in (("\\(", "\\)"), ("\\[", "\\]")):
+                if text.startswith(open_d, j):
+                    break
+            else:
+                j += 1
+                continue
+            break
+        segments.append((False, text[i:j]))
+        i = j
+
+    out_parts: list[str] = []
+    for is_delimited, content in segments:
+        if is_delimited:
+            out_parts.append(content)
+        else:
+            out_parts.append(_wrap_math_runs_in_plain(content))
+    return "".join(out_parts)
+
+
+_LATEX_CMD_RE = re.compile(r"\\[a-zA-Z]+")
+
+
+def _wrap_math_runs_in_plain(text: str) -> str:
+    r"""Wrap contiguous LaTeX-math spans in \(...\) within plain (non-delimited) text.
+
+    Strategy: scan character by character.  A math run starts the moment we
+    encounter a LaTeX command (\letter…).  Once inside a run, we stay in it as
+    long as:
+      - we are inside braces {} or parentheses () (depth > 0), OR
+      - the next non-space character is a digit, operator (+-=/<>*^_|.), brace,
+        paren, backslash, or another letter that follows a ^ or _ (subscript/
+        superscript argument).
+    A run ends at the first plain-word character (letter sequence not preceded
+    by ^ _ or \) at depth 0, or a sentence-ending punctuation that closes a
+    depth-0 context.
+    """
+    if not _LATEX_CMD_RE.search(text):
+        return text  # nothing to do — no LaTeX commands present
+
+    result: list[str] = []
+    i = 0
+    n = len(text)
+
+    while i < n:
+        # Special case: \begin{env}...\end{env} — wrap the whole environment
+        if text.startswith("\\begin{", i):
+            env_end_match = re.search(r"\\end\{[a-zA-Z*]+\}", text[i:])
+            if env_end_match:
+                env_block = text[i : i + env_end_match.end()]
+                result.append("\\(" + env_block + "\\)")
+                i += env_end_match.end()
+                continue
+        # Check for a LaTeX command start: backslash followed by letters
+        if text[i] == "\\" and i + 1 < n and text[i + 1].isalpha():
+            # Start of a math run — scan forward with bracket-awareness
+            run_start = i
+            depth_brace = 0
+            depth_paren = 0
+            j = i
+            last_non_space = i
+
+            while j < n:
+                c = text[j]
+                if c == "{":
+                    depth_brace += 1
+                    last_non_space = j
+                    j += 1
+                elif c == "}":
+                    depth_brace = max(0, depth_brace - 1)
+                    last_non_space = j
+                    j += 1
+                elif c == "(":
+                    depth_paren += 1
+                    last_non_space = j
+                    j += 1
+                elif c == ")":
+                    if depth_paren > 0:
+                        depth_paren -= 1
+                        last_non_space = j
+                        j += 1
+                    else:
+                        # Closing paren with no open — end the run before it
+                        break
+                elif c == "\\" and j + 1 < n and text[j + 1].isalpha():
+                    # Another LaTeX command — continue the run
+                    last_non_space = j
+                    j += 1
+                    while j < n and text[j].isalpha():
+                        j += 1
+                elif c == " " or c == "\t":
+                    if depth_brace > 0 or depth_paren > 0:
+                        # Inside braces/parens — spaces are part of the expression
+                        j += 1
+                    else:
+                        # Peek ahead: if the next non-space token continues math, keep going
+                        k = j
+                        while k < n and text[k] in " \t":
+                            k += 1
+                        if k < n and text[k] in "0123456789+-=<>*/^_.\\|,!;":
+                            # Next token is a math character → stay in run
+                            j = k
+                        elif k < n and text[k] == "\\" and k + 1 < n and text[k + 1].isalpha():
+                            j = k  # another command
+                        elif k < n and text[k].isalpha():
+                            # Could be e^{...} or dx or single-letter variable — stay in run
+                            # only if what follows the word is a math operator/brace/digit
+                            m = k + 1
+                            while m < n and text[m].isalpha():
+                                m += 1
+                            word_len = m - k
+                            # skip spaces after the word to find the next non-space char
+                            mm = m
+                            while mm < n and text[mm] == " ":
+                                mm += 1
+                            next_after = text[mm] if mm < n else ""
+                            if word_len <= 2 and next_after in "^_{([+-=0123456789":
+                                j = k  # e.g. "e^{-x}", "y = 0", "dx^2"
+                            else:
+                                break
+                        else:
+                            # Space before a word/punctuation that ends the run
+                            break
+                elif c in "0123456789+-=<>*/^_.|,":
+                    last_non_space = j
+                    j += 1
+                elif c.isalpha():
+                    # Letters are part of the run inside braces/parens, after ^ _, or
+                    # when they are a single-letter math variable followed by math chars
+                    if depth_brace > 0 or depth_paren > 0:
+                        last_non_space = j
+                        j += 1
+                    elif j > 0 and text[j - 1] in "^_":
+                        last_non_space = j
+                        j += 1
+                    else:
+                        # Check if it's a short math token: single/double letter followed
+                        # by ^, _, {, (, +, =, or end of run context
+                        k = j
+                        while k < n and text[k].isalpha():
+                            k += 1
+                        word_len = k - j
+                        # peek past any trailing spaces to find what follows
+                        kk = k
+                        while kk < n and text[kk] == " ":
+                            kk += 1
+                        next_ch = text[kk] if kk < n else ""
+                        if word_len <= 2 and next_ch in "^_{(+-=*/0123456789":
+                            # short math token like "e^{-x}", "dx^2", "y = 0"
+                            last_non_space = k - 1
+                            j = k
+                        elif word_len == 1 and kk >= n:
+                            # single letter at end of string — include it
+                            last_non_space = k - 1
+                            j = k
+                        else:
+                            # Multi-letter plain word — end the run before it
+                            break
+                else:
+                    # Other character (punctuation etc.) — end the run
+                    break
+
+            run = text[run_start:j].strip()
+            if run:
+                result.append("\\(" + run + "\\)")
+            else:
+                result.append(text[run_start:j])
+            i = j
+        else:
+            result.append(text[i])
+            i += 1
+
+    return "".join(result)
+
+
+def wrap_bare_math(text: str) -> str:
+    """Ensure all math in text is properly delimited for KaTeX.
+
+    Pass 1: convert Unicode math symbols to LaTeX commands.
+    Pass 2: wrap bare LaTeX runs (commands not yet inside \\(...\\) or \\[...\\]) in \\(...\\).
+    Already-delimited regions are left untouched in both passes.
+    """
+    if not text:
+        return text
+    # Pass 1: Unicode → LaTeX
+    text = unicode_math_to_latex(text)
+    # Pass 2: wrap any remaining bare LaTeX commands
+    text = _wrap_latex_outside_delimiters(text)
+    return text
 
 
 def parse_part_structure(texts: list[str]) -> dict:
@@ -402,9 +686,10 @@ def _repair_delims(text: str) -> str:
         return text
     # Merge broken pairs like "\frac{...}{13\) + 5 \(\sin}" where the VLM split
     # one math expression into two groups with a stray marker in the middle.
+    # Increased lookahead from 25 to 120 chars to handle longer equation continuations.
     if re.search(r"\\[a-zA-Z]+", text):
-        text = re.sub(r"\\\)([^\\()]{0,25}?)\\\( ", r"\1 ", text)
-        text = re.sub(r"\\\)([^\\()]{0,25}?)\\\(", r"\1", text)
+        text = re.sub(r"\\\)([^\\()]{0,120}?)\\\( ", r"\1 ", text)
+        text = re.sub(r"\\\)([^\\()]{0,120}?)\\\(", r"\1", text)
     out = []
     open_pending = 0
     i, n = 0, len(text)

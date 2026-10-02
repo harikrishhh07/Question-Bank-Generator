@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Media <-> question association engine.
 
 Uses multiple signals:
@@ -96,6 +98,8 @@ def _closest_media(q: dict, media_list: list[dict]) -> int | None:
     q_center = ((q_bbox[0] + q_bbox[2]) / 2, (q_bbox[1] + q_bbox[3]) / 2)
     best, best_dist = None, 1e9
     for mi, m in enumerate(media_list):
+        if not _same_page(q, m):
+            continue  # skip media on different pages
         mb = m.get("bbox")
         if not mb:
             continue
@@ -107,5 +111,11 @@ def _closest_media(q: dict, media_list: list[dict]) -> int | None:
 
 
 def _same_page(q: dict, m: dict) -> bool:
-    q_pages = q.get("pages") or q.get("page")
-    return True  # bbox proximity already assumed within page set
+    """Return True if the media item is on one of the question's pages."""
+    q_pages = q.get("pages")
+    if not q_pages:
+        return True  # no page info — assume same page
+    m_page = m.get("page")  # media items carry a 'page' field from the pipeline
+    if m_page is None:
+        return True  # media has no page tag — cannot rule out
+    return m_page in q_pages

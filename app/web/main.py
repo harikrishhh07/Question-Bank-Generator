@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import threading
 import uuid
@@ -12,7 +14,8 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import get_session, init_db
-from ..models import Collection, Document, Job, MediaItem, QbGeneration, Question, QuestionVersion
+from ..models import Collection, Document, Job, MediaItem, Page, QbGeneration, Question, QuestionVersion
+from ..models import Answer
 from ..pipeline.job_runner import worker_loop
 from ..storage import storage
 
@@ -34,10 +37,27 @@ _worker_thread: threading.Thread | None = None
 def _startup() -> None:
     init_db()
     _seed_assets()
+    _reset_stuck_jobs()
     global _worker_thread
     if _worker_thread is None or not _worker_thread.is_alive():
         _worker_thread = threading.Thread(target=worker_loop, args=(False, 1.0), daemon=True)
         _worker_thread.start()
+
+
+def _reset_stuck_jobs() -> None:
+    """Reset any jobs stuck in 'running' state from a previous crashed session."""
+    from ..db import SessionLocal as _SL
+    try:
+        db = _SL()
+        stuck = db.query(Job).filter(Job.status == "running").all()
+        for j in stuck:
+            j.status = "queued"
+            j.error = None
+        if stuck:
+            db.commit()
+        db.close()
+    except Exception:
+        pass
 
 
 def _seed_assets() -> None:
@@ -89,7 +109,10 @@ def delete_collection(cid: int, db: Session = Depends(get_session)):
     c = db.query(Collection).filter(Collection.id == cid).first()
     if not c:
         raise HTTPException(404)
-    db.delete(c)
+    # Explicit ordered delete to avoid FK cascade deadlocks with worker thread
+    for doc in list(c.documents):
+        _delete_document_cascade(db, doc.id)
+    db.query(Collection).filter(Collection.id == cid).delete(synchronize_session=False)
     db.commit()
     return {"ok": True}
 
@@ -144,12 +167,24 @@ async def upload_documents(cid: int, files: list[UploadFile] = File(...), db: Se
     return {"uploaded": created}
 
 
+def _delete_document_cascade(db: Session, did: int) -> None:
+    """Delete a document and all its child rows in safe dependency order."""
+    q_ids = db.query(Question.id).filter(Question.document_id == did).subquery()
+    db.query(QuestionVersion).filter(QuestionVersion.question_id.in_(q_ids)).delete(synchronize_session=False)
+    db.query(Answer).filter(Answer.question_id.in_(q_ids)).delete(synchronize_session=False)
+    db.query(Question).filter(Question.document_id == did).delete(synchronize_session=False)
+    db.query(MediaItem).filter(MediaItem.document_id == did).delete(synchronize_session=False)
+    db.query(Page).filter(Page.document_id == did).delete(synchronize_session=False)
+    db.query(Document).filter(Document.id == did).delete(synchronize_session=False)
+    db.flush()
+
+
 @app.delete("/api/documents/{did}")
 def delete_document(did: int, db: Session = Depends(get_session)):
     d = db.query(Document).filter(Document.id == did).first()
     if not d:
         raise HTTPException(404)
-    db.delete(d)
+    _delete_document_cascade(db, did)
     db.commit()
     return {"ok": True}
 

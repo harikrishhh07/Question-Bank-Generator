@@ -11,13 +11,10 @@ window.MathJax = {
     tags: 'none'
   },
   svg: { fontCache: 'global' },
-  options: {
-    enableMenu: false,
-    processHtmlClass: 'tex2jax_process'
-  }
+  options: { enableMenu: false }
 };
 </script>
-<script src="mathjax/tex-chtml.js" async></script>
+<script src="../mathjax/tex-chtml.js" async></script>
 <style>{{ css }}</style>
 </head>
 <body>
@@ -32,11 +29,12 @@ window.MathJax = {
 
 <div class="content">
 
+  <!-- COVER -->
   <section class="cover">
     <div class="cover-inner">
-      <img class="cover-logo" src="{{ logo_url or '' }}" alt="Studique">
+      <img class="cover-logo" src="{{ logo_url or '' }}" alt="Studique" onerror="this.style.display='none'">
       <div class="cover-brand">STUDIQUE</div>
-      <div class="cover-sub">PREVIOUS YEAR QUESTIONS</div>
+      <div class="cover-sub">MODEL ANSWERS</div>
       <div class="cover-title">{{ meta.bank_title }}</div>
       <div class="cover-rule"></div>
       <table class="meta-table">
@@ -45,7 +43,8 @@ window.MathJax = {
         <tr><td class="mt-label">Semester</td><td class="mt-value">{{ meta.semester }}</td></tr>
         <tr><td class="mt-label">Coverage</td><td class="mt-value">{{ meta.coverage }}</td></tr>
         <tr><td class="mt-label">PYQ Years</td><td class="mt-value">{{ meta.years | join(', ') if meta.years else '—' }}</td></tr>
-        <tr><td class="mt-label">Questions</td><td class="mt-value">{{ meta.total_questions }} ({{ meta.answered_count }} answered)</td></tr>
+        <tr><td class="mt-label">Questions</td><td class="mt-value">{{ meta.total_questions }} questions &middot; {{ meta.answered_count }} answered</td></tr>
+        <tr><td class="mt-label">Compiled</td><td class="mt-value">{{ meta.compiled_on }}</td></tr>
       </table>
       <div class="cover-rule"></div>
       <div class="cover-foot">Model Solutions &middot; Studique</div>
@@ -53,35 +52,70 @@ window.MathJax = {
     </div>
   </section>
 
+  <!-- QUESTIONS + ANSWERS -->
   {% for group in groups %}
   <section class="group">
     <div class="group-title">{{ group.title }}</div>
+
     {% for q in group.questions %}
-    <div class="qa">
+    <div class="qa-block">
+
+      <!-- Question -->
       <div class="q-head">
         <span class="q-num">{{ q.numbering }}.</span>
-        <span class="q-text">{{ q.text or '' }}</span>
-        {% if q.marks %}<span class="q-marks">{{ q.marks }}</span>{% endif %}
+        <span class="q-text">{{ q.text | safe }}</span>
+        {% if q.marks %}<span class="q-marks">{{ q.marks }} Mark{{ 's' if q.marks != 1 }}</span>{% endif %}
       </div>
+
       {% if q.options %}
-      <div class="q-opts">{% for o in q.options %}<span class="opt">{{ o }}</span>{% endfor %}</div>
-      {% endif %}
-      {% if q.subs %}
-      <div class="q-subs">{% for s in q.subs %}<span class="q-sub">{{ s.label or '' }} {{ s.text }}{% if s.is_or_alternative %} (OR){% endif %}</span>{% endfor %}</div>
+      <div class="q-opts">
+        {% for o in q.options %}
+        <span class="opt">
+          <b>({{ ["A","B","C","D","E"][loop.index0] }})&nbsp;</b>{{ o | safe }}
+        </span>
+        {% endfor %}
+      </div>
       {% endif %}
 
+      {% if q.subs %}
+      <div class="q-subs">
+        {% for s in q.subs %}
+        <div class="q-sub">
+          {% if s.is_or_alternative %}<div class="or-bar">— OR —</div>{% endif %}
+          <span class="sub-lbl">{{ s.label or '' }}</span>
+          <span class="sub-txt">{{ s.text | safe }}</span>
+          {% if s.marks %}<span class="sub-mk">({{ s.marks }})</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Answer -->
       {% set ans = answer_map.get(q.id) %}
       {% if ans %}
-        {% if ans.correct_option %}<div class="correct-opt">Correct option: <b>({{ ans.correct_option }})</b></div>{% endif %}
-        <div class="steps">
-          {% for s in ans.steps %}<div class="step">{{ loop.index }}. {{ s }}</div>{% endfor %}
+        <div class="answer-block">
+          <div class="ans-label">✦ Model Answer</div>
+          {% if ans.correct_option %}
+          <div class="correct-opt">Correct option: <strong>({{ ans.correct_option }})</strong></div>
+          {% endif %}
+          {% if ans.steps %}
+          <div class="steps">
+            {% for step in ans.steps %}
+            <div class="step"><span class="step-n">{{ loop.index }}.</span> <span class="step-txt">{{ step | safe }}</span></div>
+            {% endfor %}
+          </div>
+          {% endif %}
+          {% if ans.final_answer %}
+          <div class="final-ans">∴ &nbsp;{{ ans.final_answer | safe }}</div>
+          {% endif %}
         </div>
-        {% if ans.final_answer %}<div class="final-ans">Answer: {{ ans.final_answer }}</div>{% endif %}
       {% else %}
-        <div class="no-ans">[Answer not yet generated]</div>
+        <div class="no-ans">⚠ Answer not yet generated — run "Generate Answers" first.</div>
       {% endif %}
+
     </div>
     {% endfor %}
+
   </section>
   {% endfor %}
 

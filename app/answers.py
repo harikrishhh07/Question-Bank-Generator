@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import re
 import time
@@ -6,16 +8,16 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .llm import llm
-from .models import Answer, AnswerGeneration, Question
+from .models import Answer, AnswerGeneration, Document, Question
 
-# Heuristic: a question is "math-heavy" if its text contains LaTeX commands or math symbols.
+# ── Heuristic: is this question math-heavy? ──────────────────────────────────
 _MATH_SYMBOL_RE = re.compile(
-    r"\\[a-zA-Z]+|∫|∑|√|π|∞|∇|∂|×|±|≤|≥|→|∈|Σ|Π|\[|_\{|\^\{"
+    r"\\[a-zA-Z]+|∫|∑|√|π|∞|∇|∂|×|±|≤|≥|→|∈|Σ|Π|\^{|\_{|\\frac|\\int"
 )
 
 
 def _is_math_question(q: Question) -> bool:
-    text = (q.text or "")
+    text = q.text or ""
     for sub in (q.subs or []):
         text += " " + (sub.get("text") or "")
     for opt in (q.options or []):
@@ -23,207 +25,206 @@ def _is_math_question(q: Question) -> bool:
     return bool(_MATH_SYMBOL_RE.search(text))
 
 
-def _call_with_retry(prompt: str, math: bool, attempts: int = 4) -> str:
-    """Call the LLM with retry/backoff. Uses the strong model for math questions."""
-    model = settings.openai_strong_model if math else settings.openai_model
-    last_exc = None
-    for attempt in range(attempts):
-        try:
-            response = llm._client.responses.create(
-                model=model,
-                input=[
-                    {"role": "system", "content": [{"type": "input_text", "text": _build_system_prompt()}]},
-                    {"role": "user", "content": [{"type": "input_text", "text": prompt}]},
-                ],
-                text={"format": {"type": "json_object"}},
-            )
-            return response.output_text
-        except Exception as exc:  # noqa: BLE001
-            last_exc = exc
-            if attempt < attempts - 1:
-                time.sleep(3 * (attempt + 1))
-    raise last_exc
+# ── System / question prompts ─────────────────────────────────────────────────
+def _system_prompt() -> str:
+    return """You are writing model answers for an engineering university exam (Anna University / VTU style).
 
+Write concise, correct step-by-step solutions. DO NOT restate the question.
 
-def _build_question_prompt(q: Question) -> str:
-    parts = []
-    if q.text:
-        parts.append(q.text)
-    if q.options:
-        parts.append("\nOptions:\n" + "\n".join(q.options))
-    if q.subs:
-        sub_lines = []
-        for s in q.subs:
-            or_marker = " (OR alternative)" if s.get("is_or_alternative") else ""
-            sub_lines.append(f"{s.get('label') or ''} {s.get('text', '')}{or_marker}")
-        parts.append("\nSub-questions:\n" + "\n".join(sub_lines))
-    return "\n".join(parts)
-
-
-def _build_system_prompt() -> str:
-    return """You are a mathematics tutor writing model answers exactly as a top student writes them in an exam answer sheet.
-
-Write concise, correct, step-by-step solutions. The student has already seen the question — do NOT restate it, do NOT explain "how to approach" it. Just show the working.
-
-Return ONLY valid JSON with exactly this schema:
+Return ONLY valid JSON (no markdown fences):
 {
-  "steps": ["line 1 of working", "line 2 of working", ...],
-  "final_answer": "the final boxed result",
+  "steps": ["step 1", "step 2", ...],
+  "final_answer": "the final result",
   "correct_option": "A"
 }
 
-STYLE (critical):
-- Write like a student solving on paper: short lines of mathematics, minimal words.
-- NEVER use AI-style filler: "we can see that", "which states that", "Thus, we have", "Therefore, the final result is", "After computations", "we need to", "we can find", "this yields", "note that".
-- Do NOT restate the question. Start directly with the working.
-- Each step is one compact line of math, e.g.:
-  (a) \\( \\frac{\\partial}{\\partial y}(4x+cy+2z) - \\frac{\\partial}{\\partial z}(bx-3y-z) = c-(-1) = c+1 \\)
-- Label sub-parts (a), (b), (c) inline at the start of the relevant step. For OR alternatives, solve (a) fully and add one short line for (b).
-- For MCQ: give the correct option letter and 1-3 lines of working that justifies it.
-- Keep steps between 1 and 6 lines.
+RULES:
+- steps: array of short working lines. 3-8 lines for long questions, 1-3 for short ones.
+- final_answer: the boxed result in LaTeX if it is math.
+- correct_option: only for MCQ (A/B/C/D). Omit for descriptive questions.
+- NO filler phrases: never write "we can see that", "thus we have", "therefore", "note that", "it is given that".
+- Start directly with the mathematics or the first logical step.
+- Label sub-parts (a), (b) at the start of the step where they begin.
+- For OR alternatives: solve the first alternative fully, then add one line for the second.
 
-MATH:
-- Write all math in LaTeX delimited by \\( \\) (inline). 
-- Delimiters must wrap the WHOLE mathematical expression. NEVER place \\( or \\) inside a \frac{...}{...} or between terms of one expression — the entire expression belongs in one \\( ... \\) group.
-- Use standard notation: \\frac, \\partial, \\int, \\sum, \\sqrt, \\lim, \\nabla, \\times, \\cdot.
-- For a vector write it as a linear combination (e.g. \\(x\\mathbf{i}+y\\mathbf{j}+z\\mathbf{k}\\)), not a matrix.
-
-JSON:
-- Escape every backslash as a double backslash so the JSON is valid.
-- final_answer: the final result, in math.
-- correct_option: only for MCQ questions (A/B/C/D); otherwise omit."""
+MATH in JSON strings:
+- Use LaTeX delimiters: \\( ... \\) for inline, \\[ ... \\] for display equations.
+- Inside JSON, every backslash must be doubled: \\frac becomes \\\\frac.
+- Example step: "\\\\( x = \\\\frac{-b \\\\pm \\\\sqrt{b^2 - 4ac}}{2a} \\\\)"
+"""
 
 
-def repair_latex_backslashes(text: str) -> str:
-    """Repair LaTeX corrupted by JSON parsing.
+def _question_prompt(q: Question) -> str:
+    parts = []
+    if q.text:
+        parts.append(q.text)
+    if q.subs:
+        for s in q.subs:
+            label = s.get("label") or ""
+            text = s.get("text") or ""
+            or_flag = " [OR]" if s.get("is_or_alternative") else ""
+            parts.append(f"  {label} {text}{or_flag}".strip())
+    if q.options:
+        for i, o in enumerate(q.options):
+            parts.append(f"  ({chr(65+i)}) {o}")
+    return "\n".join(parts)
 
-    The LLM often emits unescaped backslashes in JSON (e.g. `\\boldsymbol`,
-    `\\text`, `\\begin`). json.loads then interprets `\\b` as backspace,
-    `\\t` as tab, `\\n` as newline, etc. This restores them:
-      \x08 -> \b   \x09 -> \t   \x0c -> \f   \x0d -> \r   \x0a -> \n (when a command)
-    """
-    text = (
-        text.replace("\x08", "\\b")
-        .replace("\x09", "\\t")
-        .replace("\x0c", "\\f")
-        .replace("\x0d", "\\r")
-    )
-    # newline -> \n only when it starts a LaTeX command (followed by a letter)
-    text = re.sub(r"\x0a(?=[a-zA-Z])", r"\\n", text)
-    # collapse remaining newlines that sit inside math delimiters (KaTeX can't render them)
-    text = _collapse_newlines_in_math(text)
-    # normalize delimiters with 2+ backslashes down to a single one: \\( -> \(, \\\\[ -> \[
-    text = re.sub(r"\\{2,}([\[\]()])", r"\\\1", text)
+
+# ── LLM call — works with BOTH Gemini REST and OpenAI ────────────────────────
+def _call_llm(prompt: str, strong: bool = False) -> str:
+    """Route to the active provider. Returns raw JSON string."""
+    provider = llm._provider
+
+    if provider == "gemini":
+        return _call_gemini(prompt, strong)
+    elif provider == "openai":
+        return _call_openai(prompt, strong)
+    else:
+        raise RuntimeError("No LLM provider configured. Set GEMINI_API_KEY or OPENAI_API_KEY in .env")
+
+
+def _call_gemini(prompt: str, strong: bool = False) -> str:
+    import requests as _requests
+
+    system = _system_prompt()
+    full_prompt = system + "\n\nQuestion to solve:\n" + prompt
+
+    model = settings.gemini_strong_model if strong else settings.gemini_model
+    key = settings.gemini_api_key
+
+    # Model fallback list
+    candidates = [model, "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.5-flash-lite"]
+    # Deduplicate while preserving order
+    seen = set()
+    model_list = []
+    for m in candidates:
+        m = m.replace("models/", "")
+        if m not in seen:
+            seen.add(m)
+            model_list.append(m)
+
+    payload = {
+        "contents": [{"parts": [{"text": full_prompt}]}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "temperature": 0.2,
+            "maxOutputTokens": 1024,
+        },
+    }
+
+    last_exc = None
+    for model_id in model_list:
+        for attempt in range(2):
+            try:
+                resp = _requests.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={key}",
+                    headers={"Content-Type": "application/json"},
+                    json=payload,
+                    timeout=60,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return data["candidates"][0]["content"]["parts"][0]["text"]
+                elif resp.status_code in (429, 503):
+                    last_exc = RuntimeError(f"Gemini {model_id} {resp.status_code}")
+                    time.sleep(3)
+                    break  # try next model
+                else:
+                    err = resp.json().get("error", {}).get("message", resp.text[:200])
+                    last_exc = RuntimeError(f"Gemini {resp.status_code}: {err}")
+                    break
+            except Exception as exc:
+                last_exc = exc
+                if attempt == 0:
+                    time.sleep(2)
+
+    raise last_exc or RuntimeError("All Gemini models failed")
+
+
+def _call_openai(prompt: str, strong: bool = False) -> str:
+    model = settings.openai_strong_model if strong else settings.openai_model
+    last_exc = None
+    for attempt in range(3):
+        try:
+            resp = llm._openai_client.responses.create(
+                model=model,
+                instructions=_system_prompt(),
+                input=prompt,
+                text={"format": {"type": "json_object"}},
+            )
+            return resp.output_text
+        except Exception as exc:
+            last_exc = exc
+            if attempt < 2:
+                time.sleep(4 * (attempt + 1))
+    raise last_exc
+
+
+# ── Response parsing ──────────────────────────────────────────────────────────
+def _fix_latex_escaping(text: str) -> str:
+    """Fix JSON-parsed LaTeX: double-escaped backslashes from Gemini JSON."""
+    # Gemini JSON over-escapes: \\\\frac → \\frac → \frac
+    prev = None
+    while prev != text:
+        prev = text
+        text = re.sub(r'\\\\([a-zA-Z()\[\]])', r'\\\1', text)
+    # $$...$$ → \[...\]
+    text = re.sub(r'\$\$(.+?)\$\$', r'\\[\1\\]', text, flags=re.S)
+    # $...$ → \(...\)
+    text = re.sub(r'(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)', r'\\(\1\\)', text, flags=re.S)
     return text
 
 
-def finalize_answer_text(text: str) -> str:
-    r"""Make answer LaTeX render cleanly and read like exam working."""
-    from .pipeline.postprocess import _repair_delims
+def _parse_response(raw: str) -> dict:
+    """Parse LLM JSON output tolerantly."""
+    text = raw.strip()
+    # Strip markdown fences
+    text = re.sub(r'^```[a-zA-Z]*\s*', '', text)
+    text = re.sub(r'\s*```$', '', text)
 
-    text = repair_latex_backslashes(text or "")
-    text = _remove_spurious_delimiters(text)
-    text = _repair_delims(text)
-    # stray \. (broken dot-accent) breaks KaTeX -> replace with a plain period
-    text = re.sub(r"\\\.(?![a-zA-Z{])", ".", text)
-    # wrap a math line that has no delimiters yet so KaTeX renders it
-    if "\\(" not in text and "\\[" not in text and re.search(r"\\[a-zA-Z]+|[\^_]=", text):
-        text = "\\(" + text.strip() + "\\)"
-    return text
-
-
-def _remove_spurious_delimiters(text: str) -> str:
-    r"""Drop \( \) \[ \] delimiters that appear inside {…} brace groups
-    (e.g. inside \frac{…}{…}), where the model misplaced them mid-expression."""
-    out: list[str] = []
-    i, n = 0, len(text)
-    depth = 0
-    while i < n:
-        c = text[i]
-        if c == "{":
-            depth += 1
-            out.append(c)
-            i += 1
-        elif c == "}":
-            depth = max(0, depth - 1)
-            out.append(c)
-            i += 1
-        elif text.startswith("\\(", i) or text.startswith("\\[", i) or text.startswith("\\)", i) or text.startswith("\\]", i):
-            if depth > 0:
-                i += 2  # spurious delimiter inside braces -> drop it
-            else:
-                out.append(text[i : i + 2])
-                i += 2
-        else:
-            out.append(c)
-            i += 1
-    return "".join(out)
-
-
-def _collapse_newlines_in_math(text: str) -> str:
-    out: list[str] = []
-    i, n = 0, len(text)
-    while i < n:
-        if text.startswith("\\(", i) or text.startswith("\\[", i):
-            close = "\\)" if text.startswith("\\(", i) else "\\]"
-            j = text.find(close, i + 2)
-            if j == -1:
-                j = n
-            seg = text[i + 2 : j].replace("\n", " ").replace("\r", " ")
-            out.append(text[i : i + 2] + seg + (close if j < n else ""))
-            i = j + 2 if j < n else n
-        else:
-            out.append(text[i])
-            i += 1
-    return "".join(out)
-
-
-def _parse_answer_response(text: str) -> dict:
-    """Parse LLM JSON output, tolerating code fences and stray text."""
-    text = text.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```[a-zA-Z]*\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
-        m = re.search(r"\{.*\}", text, re.S)
-        if not m:
-            return {"steps": [text], "final_answer": text, "correct_option": None, "_parse_failed": True}
-        try:
-            data = json.loads(m.group(0))
-        except json.JSONDecodeError:
-            return {"steps": [text], "final_answer": text, "correct_option": None, "_parse_failed": True}
+        m = re.search(r'\{.*\}', text, re.S)
+        if m:
+            try:
+                data = json.loads(m.group(0))
+            except json.JSONDecodeError:
+                return {"steps": [text], "final_answer": text, "correct_option": None}
+        else:
+            return {"steps": [text], "final_answer": text, "correct_option": None}
 
     steps = data.get("steps") or []
     if isinstance(steps, str):
         steps = [steps]
-    final_answer = data.get("final_answer") or steps[-1] if steps else ""
+
+    final = data.get("final_answer") or (steps[-1] if steps else "")
+
     return {
-        "steps": [finalize_answer_text(str(s)) for s in steps],
-        "final_answer": finalize_answer_text(str(final_answer)),
+        "steps": [_fix_latex_escaping(str(s)) for s in steps],
+        "final_answer": _fix_latex_escaping(str(final)),
         "correct_option": data.get("correct_option") or None,
     }
 
 
+# ── Public API ────────────────────────────────────────────────────────────────
 def generate_answer_for_question(q: Question) -> dict:
-    """Solve one question with the LLM and return the answer content dict."""
-    prompt = _build_question_prompt(q)
-    math = _is_math_question(q)
-    response = _call_with_retry(prompt, math)
-    return _parse_answer_response(response)
+    """Solve one question and return the answer content dict."""
+    prompt = _question_prompt(q)
+    strong = _is_math_question(q)
+    raw = _call_llm(prompt, strong)
+    return _parse_response(raw)
 
 
 def generate_answers_for_collection(db: Session, collection_id: int) -> dict:
-    """Generate answers for all questions in a collection. Returns progress dict."""
-    from .models import Document
-
-    gen = (
-        db.query(AnswerGeneration).filter(AnswerGeneration.collection_id == collection_id).first()
-    )
+    """Generate answers for all questions in a collection."""
+    gen = db.query(AnswerGeneration).filter(
+        AnswerGeneration.collection_id == collection_id
+    ).first()
     if gen is None:
         gen = AnswerGeneration(collection_id=collection_id)
         db.add(gen)
+
     gen.status = "running"
     gen.completed = 0
     db.commit()
@@ -232,6 +233,7 @@ def generate_answers_for_collection(db: Session, collection_id: int) -> dict:
         db.query(Question)
         .join(Document, Question.document_id == Document.id)
         .filter(Document.collection_id == collection_id)
+        .filter(Question.status.in_(["approved", "review", "pending"]))
         .all()
     )
     gen.total = len(questions)
@@ -239,34 +241,39 @@ def generate_answers_for_collection(db: Session, collection_id: int) -> dict:
 
     errors = 0
     for i, q in enumerate(questions):
-        # keep existing successful answers
+        # Skip if already answered
         existing = db.query(Answer).filter(Answer.question_id == q.id).first()
         if existing and existing.status == "generated":
             gen.completed = i + 1
             db.commit()
             continue
+
         try:
             content = generate_answer_for_question(q)
             if existing is None:
                 existing = Answer(question_id=q.id)
                 db.add(existing)
             existing.content = content
-            existing.status = "error" if content.get("_parse_failed") else "generated"
+            existing.status = "generated"
             existing.error = None
-            existing.model = settings.openai_model
-            errors += 1 if content.get("_parse_failed") else 0
         except Exception as exc:
             if existing is None:
                 existing = Answer(question_id=q.id)
                 db.add(existing)
             existing.status = "error"
-            existing.error = str(exc)
+            existing.error = str(exc)[:500]
             errors += 1
+
         gen.completed = i + 1
         db.commit()
-        time.sleep(0.4)  # gentle pacing to avoid rate limits
+        time.sleep(0.5)  # gentle pacing
 
     gen.status = "done"
     gen.error = f"{errors} failed" if errors else None
     db.commit()
-    return {"status": "done", "total": gen.total, "completed": gen.completed, "errors": errors}
+    return {
+        "status": "done",
+        "total": gen.total,
+        "completed": gen.completed,
+        "errors": errors,
+    }

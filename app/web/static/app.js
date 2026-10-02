@@ -1,43 +1,64 @@
-/* Studique QBGen - single user review UI */
+/* ================================================================
+   Studique QBGen — app.js
+   Full rewrite: better state management, real-time job polling,
+   drag-drop upload, improved review panel, math-aware preview.
+================================================================ */
 
 const state = {
   collections: [],
   collectionId: null,
   docs: [],
-  doc: null,          // selected document detail
-  questions: [],
-  media: [],
-  pages: [],
-  questionId: null,
-  page: 0,
-  polls: [],
+  // review state
+  rvDocId: null,
+  rvDoc: null,
+  rvQuestions: [],
+  rvMedia: [],
+  rvPages: [],
+  rvQid: null,
+  rvPage: 0,
+  // polling
+  _pollTimer: null,
+  _jobPollTimer: null,
 };
 
 const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g,
+  (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
-function esc(s) {
-  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
-
+/* ── API ─────────────────────────────────────────────────────── */
 async function api(url, opts = {}) {
-  const res = await fetch(url, opts);
-  if (!res.ok) {
-    let msg = res.statusText;
-    try { msg = (await res.json()).detail || msg; } catch (e) {}
+  const r = await fetch(url, opts);
+  if (!r.ok) {
+    let msg = r.statusText;
+    try { msg = (await r.json()).detail || msg; } catch (_) {}
     throw new Error(msg);
   }
-  return res.json();
+  return r.json();
 }
 
-function toast(msg, type = "ok") {
-  const t = document.createElement("div");
-  t.className = "toast " + type;
-  t.textContent = msg;
-  document.body.appendChild(t);
-  setTimeout(() => t.remove(), 3500);
+/* ── TOAST ───────────────────────────────────────────────────── */
+function toast(msg, type = "ok", duration = 3500) {
+  const icons = { ok: "✅", err: "❌", warn: "⚠️" };
+  const el = document.createElement("div");
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span>${icons[type] || "ℹ️"}</span><span>${esc(msg)}</span>`;
+  $("toast-container").appendChild(el);
+  setTimeout(() => el.remove(), duration);
 }
 
-/* ---------------- tabs ---------------- */
+/* ── STATUS DOT ──────────────────────────────────────────────── */
+async function checkServer() {
+  try {
+    await fetch("/api/collections", { signal: AbortSignal.timeout(3000) });
+    $("server-dot").className = "status-dot";
+    $("server-label").textContent = "Online";
+  } catch (_) {
+    $("server-dot").className = "status-dot off";
+    $("server-label").textContent = "Offline";
+  }
+}
+
+/* ── TABS ────────────────────────────────────────────────────── */
 document.querySelectorAll(".tab").forEach((tb) => {
   tb.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
@@ -45,420 +66,800 @@ document.querySelectorAll(".tab").forEach((tb) => {
     tb.classList.add("active");
     $("tab-" + tb.dataset.tab).classList.remove("hidden");
     if (tb.dataset.tab === "collections") refreshCollections();
-    if (tb.dataset.tab === "generate") refreshGenerate();
-    if (tb.dataset.tab === "jobs") refreshJobs();
+    if (tb.dataset.tab === "review")      refreshReview();
+    if (tb.dataset.tab === "generate")    refreshGenerate();
+    if (tb.dataset.tab === "jobs")        refreshJobs();
   });
 });
 
-/* ---------------- collections ---------------- */
+/* ═══════════════════════════════════════════════════════════════
+   COLLECTIONS TAB
+═══════════════════════════════════════════════════════════════ */
 async function refreshCollections() {
   state.collections = await api("/api/collections");
-  const list = $("collection-list");
-  list.innerHTML = state.collections.length
-    ? state.collections.map((c) => `
-      <div class="doc-item ${c.id === state.collectionId ? "selected" : ""}" onclick="selectCollection(${c.id})">
-        <div style="flex:1">
-          <div><b>${esc(c.name)}</b></div>
-          <div class="qmeta">${c.document_count} document(s) &middot; ${esc(c.created_at.slice(0, 10))}</div>
-        </div>
-        <button class="btn small red" onclick="event.stopPropagation();deleteCollection(${c.id})">Delete</button>
-      </div>`).join("")
-    : '<div class="status-line">No collections yet. Create one to begin.</div>';
-
-  // generate dropdown
+  renderCollectionList();
+  // Update generate dropdown too
   const sel = $("gen-collection");
-  sel.innerHTML = state.collections.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+  if (sel) sel.innerHTML = state.collections.map(
+    c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+}
+
+function renderCollectionList() {
+  const el = $("collection-list");
+  if (!state.collections.length) {
+    el.innerHTML = `<div class="empty-state">
+      <div class="es-icon">📚</div>
+      <div class="es-title">No collections</div>
+      <div class="es-sub">Create one above to get started</div>
+    </div>`;
+    return;
+  }
+  el.innerHTML = state.collections.map(c => `
+    <div class="list-item ${c.id === state.collectionId ? "active" : ""}" onclick="selectCollection(${c.id})">
+      <span class="li-icon">📁</span>
+      <div class="li-body">
+        <div class="li-name">${esc(c.name)}</div>
+        <div class="li-meta">${c.document_count} paper${c.document_count !== 1 ? "s" : ""} · ${c.created_at.slice(0,10)}</div>
+      </div>
+      <div class="li-actions">
+        <button class="btn sm red icon" title="Delete" onclick="event.stopPropagation();deleteCollection(${c.id})">🗑</button>
+      </div>
+    </div>`).join("");
 }
 
 async function createCollection() {
   const name = $("new-col-name").value.trim();
-  if (!name) return toast("Enter a name", "err");
-  const c = await api("/api/collections", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
-  });
-  $("new-col-name").value = "";
-  state.collectionId = c.id;
-  await selectCollection(c.id);
-  toast("Collection created");
+  if (!name) return toast("Enter a collection name", "err");
+  try {
+    const c = await api("/api/collections", {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({name}),
+    });
+    $("new-col-name").value = "";
+    await refreshCollections();
+    await selectCollection(c.id);
+    toast("Collection created");
+  } catch (e) { toast(e.message, "err"); }
 }
 
 async function deleteCollection(id) {
-  if (!confirm("Delete this collection and all its documents?")) return;
-  await api("/api/collections/" + id, { method: "DELETE" });
-  if (state.collectionId === id) { state.collectionId = null; state.docs = []; $("docs-list").innerHTML = ""; }
-  await refreshCollections();
+  if (!confirm("Delete this collection and all its papers?")) return;
+  try {
+    await api("/api/collections/" + id, {method: "DELETE"});
+    if (state.collectionId === id) {
+      state.collectionId = null; state.docs = [];
+      $("col-detail").innerHTML = `<div class="empty-state" style="margin-top:60px">
+        <div class="es-icon">👈</div><div class="es-title">Select a collection</div></div>`;
+    }
+    await refreshCollections();
+    toast("Collection deleted");
+  } catch (e) { toast(e.message, "err"); }
 }
 
 async function selectCollection(id) {
   state.collectionId = id;
-  await refreshCollections();
-  const d = await api("/api/collections/" + id);
-  state.docs = d.documents;
-  $("col-title").textContent = "Papers in: " + d.name;
-  renderDocs();
+  renderCollectionList();
+  try {
+    const d = await api("/api/collections/" + id);
+    state.docs = d.documents;
+    renderColDetail(d);
+    startDocPoll(id);
+  } catch (e) { toast(e.message, "err"); }
 }
 
-function renderDocs() {
-  const list = $("docs-list");
-  list.innerHTML = state.docs.length
-    ? state.docs.map((d) => `
-      <div class="doc-item" onclick="selectDoc(${d.id})">
-        <div style="flex:1">
-          <div><b>${esc(d.filename)}</b> <span class="badge ${esc(d.status)}">${esc(d.status)}</span></div>
-          <div class="qmeta">
-            ${d.subject_code ? esc(d.subject_code) + " &middot; " : ""}${esc(d.subject_name || "subject TBD")}
-            ${d.year ? " &middot; " + d.year : ""} &middot; ${d.question_count || 0} questions
-          </div>
+function renderColDetail(col) {
+  const el = $("col-detail");
+
+  const processing = col.documents.filter(d => ["pending","processing","running"].includes(d.status)).length;
+  const done = col.documents.filter(d => d.status === "done").length;
+  const total = col.documents.length;
+
+  el.innerHTML = `
+    <div style="margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div class="section-title" style="margin-bottom:0">📂 ${esc(col.name)}</div>
+      <div style="margin-left:auto;display:flex;gap:6px">
+        <button class="btn sm primary" onclick="triggerUpload()">＋ Upload Papers</button>
+      </div>
+    </div>
+    ${processing > 0 ? `<div class="info-box warn" style="margin-bottom:12px">
+      ⏳ ${processing} paper${processing>1?"s":""} processing… <a href="#" onclick="switchTab('jobs');return false">View Jobs</a>
+    </div>` : ""}
+    <div class="stats-row">
+      <div class="stat-chip"><div class="stat-val">${total}</div><div class="stat-lbl">Papers</div></div>
+      <div class="stat-chip"><div class="stat-val">${done}</div><div class="stat-lbl">Ready</div></div>
+      <div class="stat-chip"><div class="stat-val">${col.documents.reduce((a,d)=>a+(d.question_count||0),0)}</div><div class="stat-lbl">Questions</div></div>
+    </div>
+
+    <!-- Dropzone -->
+    <div class="dropzone" id="col-dropzone"
+      onclick="triggerUpload()"
+      ondragover="event.preventDefault();this.classList.add('dragover')"
+      ondragleave="this.classList.remove('dragover')"
+      ondrop="handleDrop(event)">
+      <div class="dz-icon">📄</div>
+      <div><b>Click or drag &amp; drop PDF files here</b></div>
+      <div style="margin-top:4px;font-size:12px">Multiple files supported · Exam question papers only</div>
+    </div>
+    <input type="file" id="file-input" multiple accept=".pdf" onchange="handleFileInput(event)">
+    <div id="upload-status" class="status-msg"></div>
+
+    <div style="margin-top:16px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:8px">
+        Papers
+        ${total > 0 ? `<span class="badge ${processing>0?"processing":"done"}">${processing>0?"Processing…":"All Ready"}</span>` : ""}
+      </div>
+      ${renderDocList(col.documents)}
+    </div>`;
+}
+
+function renderDocList(docs) {
+  if (!docs.length) return `<div class="empty-state"><div class="es-icon">📭</div><div class="es-sub">No papers uploaded yet</div></div>`;
+  return docs.map(d => `
+    <div class="list-item">
+      <span class="li-icon">${d.status === "done" ? "✅" : d.status === "error" ? "❌" : "⏳"}</span>
+      <div class="li-body">
+        <div class="li-name">${esc(d.filename)}</div>
+        <div class="li-meta">
+          ${d.subject_code ? esc(d.subject_code) + " · " : ""}${esc(d.subject_name || "Subject TBD")}
+          ${d.year ? " · " + d.year : ""} · ${d.question_count || 0} questions
+          ${d.error ? ` · <span style="color:var(--red)">${esc(d.error.slice(0,60))}</span>` : ""}
         </div>
-      </div>`).join("")
-    : '<div class="status-line">No papers uploaded.</div>';
+      </div>
+      <div class="li-actions">
+        <span class="badge ${esc(d.status)}">${esc(d.status)}</span>
+        ${d.status === "done" ? `<button class="btn sm" onclick="reviewDoc(${d.id})" title="Review questions">🔍</button>` : ""}
+        ${d.status !== "processing" ? `<button class="btn sm amber" onclick="reprocessDoc(${d.id})" title="Reprocess">↻</button>` : ""}
+        <button class="btn sm red" onclick="deleteDoc(${d.id})" title="Delete">🗑</button>
+      </div>
+    </div>`).join("");
 }
 
-async function refreshReviewSelect() {
-  const sel = $("rv-doc-select");
-  sel.innerHTML = state.docs.map((d) => `<option value="${d.id}">${esc(d.filename)} (${d.subject_code || "?"})</option>`).join("");
-  if (state.docs.length) {
-    const did = parseInt(sel.value);
-    await selectDoc(did);
+function triggerUpload() {
+  if (!state.collectionId) return toast("Select a collection first", "err");
+  $("file-input").click();
+}
+
+async function handleDrop(ev) {
+  ev.preventDefault();
+  ev.currentTarget.classList.remove("dragover");
+  if (!state.collectionId) return toast("Select a collection first", "err");
+  const files = Array.from(ev.dataTransfer.files).filter(f => f.name.endsWith(".pdf"));
+  if (!files.length) return toast("Only PDF files are supported", "warn");
+  await uploadFiles(files);
+}
+
+async function handleFileInput(ev) {
+  const files = Array.from(ev.target.files);
+  ev.target.value = "";
+  await uploadFiles(files);
+}
+
+async function uploadFiles(files) {
+  if (!files.length || !state.collectionId) return;
+  const statusEl = $("upload-status");
+  statusEl.textContent = `Uploading ${files.length} file(s)…`;
+  statusEl.className = "status-msg";
+  const fd = new FormData();
+  files.forEach(f => fd.append("files", f));
+  try {
+    const r = await api("/api/collections/" + state.collectionId + "/documents", {method:"POST",body:fd});
+    statusEl.textContent = `✓ ${r.uploaded.length} file(s) uploaded. Processing started.`;
+    statusEl.className = "status-msg ok";
+    toast(`${r.uploaded.length} paper(s) queued for processing`);
+    await refreshColDocuments();
+    switchTab("jobs");
+  } catch (e) {
+    statusEl.textContent = "Upload failed: " + e.message;
+    statusEl.className = "status-msg err";
+    toast(e.message, "err");
   }
 }
 
-async function selectDoc(did) {
-  state.doc = await api("/api/documents/" + did);
-  state.questions = state.doc.questions;
-  state.media = state.doc.media;
-  state.pages = state.doc.pages;
-  state.questionId = null;
-  state.page = state.pages.length ? state.pages[0].page_number : 0;
-  renderQList();
-  renderDetail();
-  renderPage();
+async function refreshColDocuments() {
+  if (!state.collectionId) return;
+  try {
+    const d = await api("/api/collections/" + state.collectionId);
+    state.docs = d.documents;
+    renderColDetail(d);
+  } catch (_) {}
 }
 
-function renderQList() {
-  const list = $("rv-qlist");
-  const counts = { approved: 0, review: 0, rejected: 0, pending: 0 };
-  state.questions.forEach((q) => { counts[q.status] = (counts[q.status] || 0) + 1; });
-  $("rv-qcount").textContent = `${state.questions.length} total · ${counts.approved || 0} approved · ${counts.review || 0} review`;
+async function reprocessDoc(did) {
+  try {
+    await api("/api/documents/" + did + "/reprocess", {method:"POST"});
+    toast("Reprocessing queued");
+    setTimeout(refreshColDocuments, 600);
+    switchTab("jobs");
+  } catch (e) { toast(e.message, "err"); }
+}
 
-  const warnings = (state.doc.warnings || []).map((w) => `<span class="flag">[${esc(w.code || "")}] ${esc(w.reason || "")}</span>`).join("");
-  list.innerHTML = (warnings ? `<div style="margin-bottom:8px">${warnings}</div>` : "") +
-    state.questions.map((q) => {
-    const conf = q.confidence && q.confidence.overall ? Math.round(q.confidence.overall * 100) : "?";
-    return `
-    <div class="q-item ${q.id === state.questionId ? "selected" : ""}" onclick="selectQuestion(${q.id})">
-      <div class="row" style="justify-content:space-between">
-        <span class="qnum">${esc(q.number || "?")}</span>
-        <span class="badge ${esc(q.status)}">${esc(q.status)}</span>
+async function deleteDoc(did) {
+  if (!confirm("Delete this paper and all its extracted questions?")) return;
+  try {
+    await api("/api/documents/" + did, {method:"DELETE"});
+    toast("Paper deleted");
+    await refreshColDocuments();
+  } catch (e) { toast(e.message, "err"); }
+}
+
+function reviewDoc(did) {
+  state.rvDocId = did;
+  switchTab("review");
+  loadRvDoc(did);
+}
+
+function startDocPoll(cid) {
+  clearInterval(state._pollTimer);
+  state._pollTimer = setInterval(async () => {
+    if (state.collectionId !== cid) return clearInterval(state._pollTimer);
+    try {
+      const d = await api("/api/collections/" + cid);
+      const changed = d.documents.some((nd, i) => {
+        const od = (state.docs || [])[i];
+        return !od || nd.status !== od.status || nd.question_count !== od.question_count;
+      });
+      if (changed || d.documents.some(x => ["pending","processing","running"].includes(x.status))) {
+        state.docs = d.documents;
+        renderColDetail(d);
+      }
+    } catch (_) {}
+  }, 5000);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   REVIEW TAB
+═══════════════════════════════════════════════════════════════ */
+async function refreshReview() {
+  try {
+    const cols = await api("/api/collections");
+    // Build flat doc list across all collections
+    const allDocs = [];
+    for (const c of cols) {
+      const cd = await api("/api/collections/" + c.id);
+      cd.documents.filter(d => d.status === "done").forEach(d => {
+        allDocs.push({...d, colName: c.name});
+      });
+    }
+    const sel = $("rv-doc-select");
+    if (!allDocs.length) {
+      sel.innerHTML = `<option value="">— No processed papers —</option>`;
+      return;
+    }
+    sel.innerHTML = allDocs.map(d =>
+      `<option value="${d.id}" ${d.id === state.rvDocId ? "selected" : ""}>${esc(d.filename)} (${esc(d.subject_code || d.colName)})</option>`
+    ).join("");
+    const targetId = state.rvDocId || allDocs[0].id;
+    await loadRvDoc(targetId);
+  } catch (e) { toast(e.message, "err"); }
+}
+
+async function onRvDocChange() {
+  const did = parseInt($("rv-doc-select").value);
+  if (did) await loadRvDoc(did);
+}
+
+async function loadRvDoc(did) {
+  state.rvDocId = did;
+  state.rvQid = null;
+  try {
+    const d = await api("/api/documents/" + did);
+    state.rvDoc = d;
+    state.rvQuestions = d.questions;
+    state.rvMedia = d.media;
+    state.rvPages = d.pages;
+    state.rvPage = d.pages.length ? d.pages[0].page_number : 0;
+    renderRvStats();
+    renderRvQList();
+    $("rv-detail-panel").innerHTML = `<div class="empty-state" style="margin-top:60px">
+      <div class="es-icon">⬅️</div><div class="es-title">Select a question to review</div></div>`;
+  } catch (e) { toast(e.message, "err"); }
+}
+
+function renderRvStats() {
+  const qs = state.rvQuestions;
+  const counts = {approved:0, review:0, rejected:0, pending:0};
+  qs.forEach(q => { counts[q.status] = (counts[q.status] || 0) + 1; });
+  $("rv-stats").innerHTML = `
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+      <span class="badge done">✓ ${counts.approved} approved</span>
+      <span class="badge review">⚠ ${counts.review} review</span>
+      <span class="badge rejected">✗ ${counts.rejected} rejected</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="width:${qs.length ? Math.round(counts.approved/qs.length*100) : 0}%"></div></div>`;
+}
+
+function renderRvQList() {
+  const el = $("rv-qlist");
+  const qs = state.rvQuestions;
+  if (!qs.length) {
+    el.innerHTML = `<div class="empty-state"><div class="es-icon">📋</div><div class="es-title">No questions extracted</div><div class="es-sub">Upload a real exam question paper PDF</div></div>`;
+    return;
+  }
+
+  // Filter controls
+  const filterHtml = `<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+    <select id="rv-filter" onchange="applyRvFilter()" style="flex:1;font-size:12px;padding:5px 8px">
+      <option value="all">All Questions</option>
+      <option value="approved">Approved</option>
+      <option value="review">Needs Review</option>
+      <option value="rejected">Rejected</option>
+    </select>
+    <select id="rv-part-filter" onchange="applyRvFilter()" style="flex:1;font-size:12px;padding:5px 8px">
+      <option value="">All Parts</option>
+      ${[...new Set(qs.map(q=>q.part).filter(Boolean))].sort().map(p=>`<option value="${p}">Part ${esc(p)}</option>`).join("")}
+    </select>
+  </div>`;
+
+  el.innerHTML = filterHtml + `<div id="rv-qlist-items">${buildQListItems(qs)}</div>`;
+}
+
+function applyRvFilter() {
+  const status = $("rv-filter")?.value || "all";
+  const part = $("rv-part-filter")?.value || "";
+  let qs = state.rvQuestions;
+  if (status !== "all") qs = qs.filter(q => q.status === status);
+  if (part) qs = qs.filter(q => q.part === part);
+  const el = $("rv-qlist-items");
+  if (el) el.innerHTML = buildQListItems(qs);
+}
+
+function buildQListItems(qs) {
+  if (!qs.length) return `<div class="empty-state"><div class="es-sub">No questions match filter</div></div>`;
+  return qs.map(q => {
+    const conf = q.confidence?.overall ? Math.round(q.confidence.overall * 100) : "?";
+    const textPreview = q.text.replace(/\\[\(\[\)\]]/g,"").replace(/\\.+?\{.*?\}/g,"(eq)").slice(0,60);
+    return `<div class="q-item ${q.id === state.rvQid ? "active" : ""}" onclick="selectRvQ(${q.id})">
+      <div class="q-item-head">
+        <span class="q-num">${esc(q.number || "?")}</span>
+        ${q.part ? `<span class="badge" style="background:var(--accent-soft);color:var(--accent);border-color:#fe6e0033">Part ${esc(q.part)}</span>` : ""}
+        <span class="badge ${esc(q.status)}" style="margin-left:auto">${esc(q.status)}</span>
       </div>
-      <div class="qmeta">Part ${esc(q.part || "?")} &middot; ${q.marks ?? "?"} marks &middot; conf ${conf}%${q.flags && q.flags.length ? " &middot; " + q.flags.length + " flag(s)" : ""}</div>
+      <div class="q-text-preview">${esc(textPreview)}${q.text.length > 60 ? "…" : ""}</div>
+      <div class="q-item-meta" style="margin-top:4px">
+        ${q.marks != null ? `<span class="pill">${q.marks}m</span>` : ""}
+        <span class="pill" title="Confidence">🎯 ${conf}%</span>
+        ${q.flags?.length ? `<span class="pill" style="color:var(--amber)">⚠ ${q.flags.length}</span>` : ""}
+        ${q.subs?.length ? `<span class="pill">${q.subs.length} sub${q.subs.length>1?"s":""}</span>` : ""}
+        ${q.options?.length ? `<span class="pill">MCQ</span>` : ""}
+      </div>
     </div>`;
-  }).join("") || '<div class="status-line">No questions yet.</div>';
+  }).join("");
 }
 
-function selectQuestion(qid) {
-  state.questionId = qid;
-  renderQList();
-  renderDetail();
+function selectRvQ(qid) {
+  state.rvQid = qid;
+  // Refresh active state in list
+  document.querySelectorAll(".q-item").forEach(el => el.classList.remove("active"));
+  const active = document.querySelector(`.q-item[onclick="selectRvQ(${qid})"]`);
+  if (active) active.classList.add("active");
+  renderRvDetail();
 }
 
-function findQ() {
-  return state.questions.find((q) => q.id === state.questionId);
-}
+function getQ() { return state.rvQuestions.find(q => q.id === state.rvQid); }
 
-function renderDetail() {
-  const el = $("rv-detail");
-  const q = findQ();
-  if (!q) { el.innerHTML = '<div class="status-line">Select a question to review it.</div>'; return; }
+function renderRvDetail() {
+  const q = getQ();
+  const el = $("rv-detail-panel");
+  if (!q) { el.innerHTML = ""; return; }
 
   const conf = q.confidence || {};
+  const ovConf = Math.round((conf.overall ?? 0) * 100);
+  const confColor = ovConf >= 80 ? "var(--green)" : ovConf >= 50 ? "var(--amber)" : "var(--red)";
+
   el.innerHTML = `
-    <div class="row" style="justify-content:space-between;margin-bottom:10px">
-      <h2 style="margin:0">Question ${esc(q.number)} <span class="badge ${esc(q.status)}">${esc(q.status)}</span></h2>
-      <div class="row">
-        <button class="btn green small" onclick="setStatus('approved')">Approve</button>
-        <button class="btn small" onclick="setStatus('review')">Needs Review</button>
-        <button class="btn red small" onclick="setStatus('rejected')">Reject</button>
-        <button class="btn red small" onclick="deleteQ()">Delete</button>
-      </div>
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+    <div style="font-weight:800;font-size:15px">Q ${esc(q.number)} — Part ${esc(q.part || "?")}</div>
+    <span class="badge ${esc(q.status)}">${esc(q.status)}</span>
+    <div style="margin-left:auto;display:flex;gap:6px">
+      <button class="btn sm green" onclick="setQStatus('approved')">✓ Approve</button>
+      <button class="btn sm amber" onclick="setQStatus('review')">⚠ Review</button>
+      <button class="btn sm red" onclick="setQStatus('rejected')">✗ Reject</button>
     </div>
-    <div class="grid2">
-      <div>
-        <label>Number</label>
-        <div class="row"><input id="e-number" value="${esc(q.number)}" style="flex:1"><input id="e-marks" type="number" value="${q.marks ?? ""}" style="width:90px"></div>
-        <label>Part</label>
-        <input id="e-part" value="${esc(q.part)}">
-        <label>Question text</label>
-        <textarea id="e-text" rows="6">${esc(q.text)}</textarea>
-        <label>Options (MCQ)</label>
-        <div id="e-options"></div>
-        <button class="btn small" onclick="addOption()">+ Option</button>
+  </div>
+
+  ${q.flags?.length ? `<div style="margin-bottom:10px">${q.flags.map(f=>`<span class="flag">⚠ ${esc(f.reason||f)}</span> `).join("")}</div>` : ""}
+
+  <div class="grid2" style="gap:14px">
+    <div>
+      <div class="label" style="margin-top:0">Number</div>
+      <div class="form-row">
+        <input id="e-number" value="${esc(q.number)}" placeholder="1">
+        <input id="e-part"   value="${esc(q.part)}"   placeholder="A" style="max-width:60px">
+        <input id="e-marks" type="number" value="${q.marks ?? ""}" placeholder="Marks" style="max-width:80px">
       </div>
-      <div>
-        <label>Sub-questions</label>
-        <div id="e-subs"></div>
-        <button class="btn small" onclick="addSub()">+ Sub-question</button>
-        <label>Associated media (click to toggle)</label>
-        <div class="media-grid" id="e-media"></div>
-        <label>Confidence</label>
-        <div>
-          <span class="pill">overall ${Math.round((conf.overall ?? 0) * 100)}%</span>
-          <span class="pill">ocr ${Math.round((conf.ocr ?? 0) * 100)}%</span>
-          <span class="pill">seg ${Math.round((conf.question_segmentation ?? 0) * 100)}%</span>
-        </div>
-        ${q.flags && q.flags.length ? `<label>Flags</label>${q.flags.map((f) => `<span class="flag">[${esc(f.code || "")}] ${esc(f.reason || f)}</span>`).join("")}` : ""}
-      </div>
+
+      <div class="label">Question Text</div>
+      <textarea id="e-text" rows="5">${esc(q.text)}</textarea>
+      <div class="math-hint">💡 Use \\( ... \\) for inline math, \\[ ... \\] for display equations</div>
+
+      ${q.options?.length || true ? `
+      <div class="label" style="margin-top:10px">Options (leave empty if not MCQ)</div>
+      <div id="e-options">${renderOptionsHTML(q.options||[])}</div>
+      <button class="btn sm" onclick="addOpt()" style="margin-top:4px">＋ Option</button>
+      ` : ""}
     </div>
-    <div class="row" style="margin-top:14px">
-      <button class="btn primary" onclick="saveQuestion()">Save changes</button>
-      <span id="e-saved" class="status-line"></span>
-    </div>`;
 
-  renderOptions(q.options);
-  renderSubs(q.subs);
-  renderMediaPicker(q.media_ids);
+    <div>
+      <div class="label" style="margin-top:0">Sub-questions</div>
+      <div id="e-subs">${renderSubsHTML(q.subs||[])}</div>
+      <button class="btn sm" onclick="addSub()" style="margin-top:4px">＋ Sub-question</button>
+
+      <div class="label" style="margin-top:12px">Confidence</div>
+      ${confBar("Overall", conf.overall)}
+      ${confBar("OCR", conf.ocr)}
+      ${confBar("Segmentation", conf.question_segmentation)}
+
+      ${state.rvMedia.length ? `
+      <div class="label" style="margin-top:12px">Media (click to attach/detach)</div>
+      <div class="media-grid" id="e-media">${renderMediaPickerHTML(q.media_ids||[])}</div>
+      ` : ""}
+    </div>
+  </div>
+
+  <div class="btn-row" style="margin-top:14px">
+    <button class="btn primary" onclick="saveQuestion()">💾 Save Changes</button>
+    <button class="btn red sm" onclick="deleteQuestion()">🗑 Delete</button>
+    <span id="e-saved" class="status-msg" style="margin-left:4px"></span>
+  </div>
+
+  <hr style="margin:14px 0">
+
+  <!-- Page preview -->
+  <div>
+    <div style="font-weight:700;font-size:12px;color:var(--muted);margin-bottom:8px">📄 PAGE PREVIEW</div>
+    <div class="page-strip">
+      ${state.rvPages.map(p=>`<span class="page-btn ${p.page_number===state.rvPage?"active":""}" onclick="setRvPage(${p.page_number})">${p.page_number+1}</span>`).join("")}
+    </div>
+    ${renderPageImg()}
+  </div>`;
 }
 
-function renderOptions(options) {
-  const el = $("e-options");
-  el.innerHTML = options.map((o, i) => `
-    <div class="opt-row">
-      <span class="lbl">${String.fromCharCode(65 + i)}.</span>
-      <input class="opt-in" value="${esc(o)}">
-      <button class="btn small red" onclick="removeRow(this,'opt')">&times;</button>
-    </div>`).join("") || '<div class="status-line">No options.</div>';
+function confBar(label, val) {
+  const pct = Math.round((val ?? 0) * 100);
+  const color = pct >= 80 ? "var(--green)" : pct >= 50 ? "var(--amber)" : "var(--red)";
+  return `<div class="conf-row">
+    <div class="conf-label">${label}</div>
+    <div class="conf-bar"><div class="conf-fill" style="width:${pct}%;background:${color}"></div></div>
+    <div class="conf-val">${pct}%</div>
+  </div>`;
 }
 
-function addOption() { renderOptions([...collectOptions(), ""]); }
-function collectOptions() {
-  return Array.from(document.querySelectorAll("#e-options .opt-in")).map((i) => i.value);
-}
-function removeRow(btn) {
-  const row = btn.closest(".opt-row, .sub-row");
-  row.remove();
+function renderPageImg() {
+  const p = state.rvPages.find(p => p.page_number === state.rvPage);
+  return p ? `<img class="page-img" src="${esc(p.render_url)}" alt="Page ${p.page_number+1}">` : "";
 }
 
-function renderSubs(subs) {
-  const el = $("e-subs");
-  el.innerHTML = subs.map((s, i) => `
-    <div class="sub-row">
-      <input class="lbl" placeholder="(a)" value="${esc(s.label || "")}">
-      <input class="sub-txt" placeholder="text" value="${esc(s.text || "")}">
-      <input class="mk" type="number" placeholder="m" value="${s.marks ?? ""}">
-      <label class="orbox"><input type="checkbox" class="or-chk" ${s.is_or_alternative ? "checked" : ""}> OR</label>
-      <button class="btn small red" onclick="removeRow(this)">&times;</button>
-    </div>`).join("") || '<div class="status-line">No sub-questions.</div>';
+function setRvPage(n) {
+  state.rvPage = n;
+  // Re-render just the page strip + image
+  document.querySelectorAll(".page-btn").forEach(el => {
+    el.classList.toggle("active", parseInt(el.textContent) - 1 === n);
+  });
+  const imgs = document.querySelectorAll(".page-img");
+  const p = state.rvPages.find(p => p.page_number === n);
+  if (imgs.length && p) imgs[imgs.length-1].src = p.render_url;
+}
+
+function renderOptionsHTML(opts) {
+  if (!opts.length) return `<div style="color:var(--muted2);font-size:12px;padding:4px 0">No options — this is a descriptive question</div>`;
+  return opts.map((o, i) => `<div class="opt-row">
+    <span class="opt-lbl">${String.fromCharCode(65+i)}.</span>
+    <input class="opt-in" value="${esc(o)}" placeholder="Option text">
+    <button class="btn sm red icon" onclick="removeOptRow(this)" style="padding:4px 7px">×</button>
+  </div>`).join("");
+}
+
+function addOpt() {
+  const opts = collectOpts();
+  $("e-options").innerHTML = renderOptionsHTML([...opts, ""]);
+}
+
+function removeOptRow(btn) { btn.closest(".opt-row").remove(); }
+function collectOpts() { return Array.from(document.querySelectorAll("#e-options .opt-in")).map(i=>i.value); }
+
+function renderSubsHTML(subs) {
+  if (!subs.length) return `<div style="color:var(--muted2);font-size:12px;padding:4px 0">No sub-questions</div>`;
+  return subs.map((s,i) => `<div class="sub-row">
+    <input class="sub-lbl" placeholder="(a)" value="${esc(s.label||"")}">
+    <input class="sub-txt" placeholder="Sub-question text" value="${esc(s.text||"")}">
+    <input class="sub-mk" type="number" placeholder="m" value="${s.marks??""}" title="Marks">
+    <label class="sub-or" title="OR alternative">
+      <input type="checkbox" class="or-chk" ${s.is_or_alternative?"checked":""}> OR
+    </label>
+    <button class="btn sm red icon" onclick="removeSubRow(this)" style="padding:4px 7px">×</button>
+  </div>`).join("");
 }
 
 function addSub() {
-  renderSubs([...collectSubs(), { label: "", text: "", marks: null }]);
+  const subs = collectSubs();
+  $("e-subs").innerHTML = renderSubsHTML([...subs, {label:"",text:"",marks:null,is_or_alternative:false}]);
 }
 
+function removeSubRow(btn) { btn.closest(".sub-row").remove(); }
 function collectSubs() {
-  const rows = Array.from(document.querySelectorAll("#e-subs .sub-row"));
-  return rows.map((r) => ({
-    label: r.querySelector(".lbl").value,
-    text: r.querySelector(".sub-txt").value,
-    marks: r.querySelector(".mk").value ? parseInt(r.querySelector(".mk").value) : null,
+  return Array.from(document.querySelectorAll("#e-subs .sub-row")).map(r => ({
+    label: r.querySelector(".sub-lbl").value,
+    text:  r.querySelector(".sub-txt").value,
+    marks: r.querySelector(".sub-mk").value ? parseInt(r.querySelector(".sub-mk").value) : null,
     is_or_alternative: r.querySelector(".or-chk").checked,
   }));
 }
 
-function renderMediaPicker(attached) {
-  const el = $("e-media");
-  const set = new Set(attached || []);
-  el.innerHTML = state.media.length
-    ? state.media.map((m) => `
-      <div class="media-thumb ${set.has(m.id) ? "attached" : ""}" onclick="toggleMedia(${m.id})" title="type: ${esc(m.type)}">
-        <img src="${esc(m.thumb_url)}">
-        <span class="tag">${esc(m.type)}${m.shared ? " · shared" : ""}</span>
-      </div>`).join("")
-    : '<div class="status-line">No media detected.</div>';
+function renderMediaPickerHTML(attachedIds) {
+  const set = new Set(attachedIds);
+  if (!state.rvMedia.length) return `<span style="color:var(--muted2);font-size:12px">No media detected</span>`;
+  return state.rvMedia.map(m => `
+    <div class="media-thumb ${set.has(m.id)?"attached":""}" onclick="toggleMedia(${m.id})" title="${esc(m.type)}">
+      <img src="${esc(m.thumb_url)}" alt="${esc(m.type)}">
+      <span class="mt-tag">${esc(m.type)}</span>
+    </div>`).join("");
 }
 
 function toggleMedia(mid) {
-  const q = findQ();
+  const q = getQ();
   const set = new Set(q.media_ids || []);
   set.has(mid) ? set.delete(mid) : set.add(mid);
-  q.media_ids = Array.from(set);
-  renderMediaPicker(q.media_ids);
+  q.media_ids = [...set];
+  const el = $("e-media");
+  if (el) el.innerHTML = renderMediaPickerHTML(q.media_ids);
 }
 
 async function saveQuestion() {
-  const q = findQ();
+  const q = getQ();
+  if (!q) return;
   const body = {
     number: $("e-number").value,
-    marks: $("e-marks").value ? parseInt($("e-marks").value) : null,
     part: $("e-part").value,
+    marks: $("e-marks").value ? parseInt($("e-marks").value) : null,
     text: $("e-text").value,
-    options: collectOptions(),
+    options: collectOpts().filter(o=>o.trim()),
     subs: collectSubs(),
     media_ids: q.media_ids,
   };
-  await api("/api/questions/" + q.id, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
-  Object.assign(q, body);
-  $("e-saved").textContent = "Saved ✓  (version " + (q.version + 1) + ")";
-  renderQList();
-  toast("Question saved");
+  try {
+    await api("/api/questions/" + q.id, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(body),
+    });
+    Object.assign(q, body);
+    $("e-saved").textContent = "✓ Saved";
+    $("e-saved").className = "status-msg ok";
+    setTimeout(() => { if ($("e-saved")) $("e-saved").textContent = ""; }, 2500);
+    renderRvStats();
+    applyRvFilter();
+    toast("Question saved");
+  } catch (e) { toast(e.message, "err"); }
 }
 
-async function setStatus(status) {
-  await api("/api/questions/" + state.questionId + "/status", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }),
-  });
-  findQ().status = status;
-  renderQList();
-  renderDetail();
+async function setQStatus(status) {
+  const q = getQ();
+  if (!q) return;
+  try {
+    await api("/api/questions/" + q.id + "/status", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({status}),
+    });
+    q.status = status;
+    renderRvStats();
+    applyRvFilter();
+    renderRvDetail();
+    toast("Status updated to: " + status);
+  } catch (e) { toast(e.message, "err"); }
 }
 
-async function deleteQ() {
-  if (!confirm("Delete this question?")) return;
-  await api("/api/questions/" + state.questionId, { method: "DELETE" });
-  state.questions = state.questions.filter((q) => q.id !== state.questionId);
-  state.questionId = null;
-  renderQList();
-  renderDetail();
+async function deleteQuestion() {
+  if (!confirm("Delete this question permanently?")) return;
+  try {
+    await api("/api/questions/" + state.rvQid, {method:"DELETE"});
+    state.rvQuestions = state.rvQuestions.filter(q => q.id !== state.rvQid);
+    state.rvQid = null;
+    renderRvStats();
+    renderRvQList();
+    $("rv-detail-panel").innerHTML = `<div class="empty-state" style="margin-top:60px">
+      <div class="es-icon">⬅️</div><div class="es-title">Select a question</div></div>`;
+    toast("Question deleted");
+  } catch (e) { toast(e.message, "err"); }
 }
 
-/* ---------------- page preview ---------------- */
-function renderPage() {
-  const el = $("rv-page");
-  if (!el) return;
-  const p = state.pages.find((p) => p.page_number === state.page);
-  el.innerHTML = `
-    <div class="page-select">
-      ${state.pages.map((pg) => `<span class="page-btn ${pg.page_number === state.page ? "active" : ""}" onclick="setPage(${pg.page_number})">${pg.page_number + 1}</span>`).join("")}
-    </div>
-    ${p ? `<img src="${esc(p.render_url)}" alt="page ${p.page_number + 1}">` : ""}`;
-}
-
-function setPage(n) { state.page = n; renderPage(); }
-
-/* ---------------- generate ---------------- */
+/* ═══════════════════════════════════════════════════════════════
+   GENERATE TAB
+═══════════════════════════════════════════════════════════════ */
 async function refreshGenerate() {
-  await refreshCollections();
-  const banks = await api("/api/banks");
-  $("bank-list").innerHTML = banks.length
-    ? banks.map((b) => `
-      <div class="bank-item">
-        <div>
-          <b>${esc(b.name)}</b>
-          <div class="qmeta">${b.question_count} questions · ${esc(b.template)} · ${esc(b.created_at.slice(0, 16).replace("T", " "))}</div>
+  try {
+    const cols = await api("/api/collections");
+    state.collections = cols;
+    const sel = $("gen-collection");
+    sel.innerHTML = cols.length
+      ? cols.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("")
+      : `<option value="">— No collections —</option>`;
+  } catch (_) {}
+  await refreshBankList();
+}
+
+async function refreshBankList() {
+  try {
+    const banks = await api("/api/banks");
+    const el = $("bank-list");
+    if (!banks.length) {
+      el.innerHTML = `<div class="empty-state"><div class="es-icon">📄</div><div class="es-title">No banks generated yet</div></div>`;
+      return;
+    }
+    el.innerHTML = banks.map(b => `
+      <div class="bank-row">
+        <span style="font-size:18px">📄</span>
+        <div class="bank-info">
+          <div class="bank-name">${esc(b.name)}</div>
+          <div class="bank-meta">
+            ${b.question_count} questions · ${esc(b.template)} ·
+            ${b.created_at.slice(0,16).replace("T"," ")}
+          </div>
         </div>
-        ${b.url ? `<a class="btn primary small" href="${esc(b.url)}" target="_blank">Download PDF</a>` : ""}
-      </div>`).join("")
-    : '<div class="status-line">No banks generated yet.</div>';
+        <div class="bank-actions">
+          ${b.url ? `<a class="btn sm primary" href="${esc(b.url)}" download>⬇ Download PDF</a>` : ""}
+        </div>
+      </div>`).join("");
+  } catch (_) {}
 }
 
 async function generateBank() {
   const cid = parseInt($("gen-collection").value);
-  if (!cid) return toast("Select a collection", "err");
+  if (!cid) return toast("Select a collection first", "err");
   const config = {
-    bank_title: $("gen-title").value || "QUESTION BANK",
+    bank_title:   $("gen-title").value || "QUESTION BANK",
     subject_name: $("gen-subject-name").value,
     subject_code: $("gen-subject-code").value,
-    course: $("gen-course").value,
-    semester: $("gen-semester").value,
-    coverage: $("gen-coverage").value || "All Units",
-    group_by: $("gen-group").value,
-    notes: $("gen-notes").value,
-    watermark: { image: $("gen-wm-image").value || undefined },
+    course:       $("gen-course").value,
+    semester:     $("gen-semester").value,
+    coverage:     $("gen-coverage").value || "All Units",
+    group_by:     $("gen-group").value,
+    notes:        $("gen-notes").value,
   };
-  const r = await api("/api/collections/" + cid + "/generate", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(config),
-  });
-  $("gen-status").textContent = "Queued job #" + r.job_id + ". Refresh the Jobs tab for status, then the Generate tab for the PDF.";
-  toast("Generation queued");
+  const statusEl = $("gen-status");
+  statusEl.textContent = "Queuing…";
+  statusEl.className = "status-msg";
+  try {
+    const r = await api("/api/collections/" + cid + "/generate", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(config),
+    });
+    statusEl.textContent = `✓ Job #${r.job_id} queued. Generating PDF…`;
+    statusEl.className = "status-msg ok";
+    toast("Bank generation queued");
+    pollForBank(r.job_id);
+  } catch (e) {
+    statusEl.textContent = "Error: " + e.message;
+    statusEl.className = "status-msg err";
+    toast(e.message, "err");
+  }
+}
+
+async function pollForBank(jobId) {
+  const statusEl = $("gen-status");
+  let attempts = 0;
+  const t = setInterval(async () => {
+    attempts++;
+    try {
+      const jobs = await api("/api/jobs");
+      const job = jobs.find(j => j.id === jobId);
+      if (!job) return clearInterval(t);
+      if (job.status === "done") {
+        clearInterval(t);
+        statusEl.textContent = "✓ PDF generated!";
+        statusEl.className = "status-msg ok";
+        toast("Question Bank PDF ready! Check Generated Banks.", "ok", 5000);
+        await refreshBankList();
+      } else if (job.status === "error") {
+        clearInterval(t);
+        statusEl.textContent = "Error: " + (job.error || "Generation failed");
+        statusEl.className = "status-msg err";
+        toast("PDF generation failed: " + (job.error || "unknown error"), "err");
+      }
+    } catch (_) {}
+    if (attempts > 60) clearInterval(t);
+  }, 5000);
 }
 
 async function generateAnswers() {
   const cid = parseInt($("gen-collection").value);
-  if (!cid) return toast("Select a collection", "err");
-  const r = await api("/api/collections/" + cid + "/answers/generate", { method: "POST" });
-  $("gen-status").textContent = "Answer generation queued (job #" + r.job_id + "). This solves each question with the AI model — can take a few minutes.";
-  toast("Answer generation queued");
+  if (!cid) return toast("Select a collection first", "err");
+  const statusEl = $("gen-status");
+  try {
+    const r = await api("/api/collections/" + cid + "/answers/generate", {method:"POST"});
+    statusEl.textContent = `Answer generation job #${r.job_id} queued. Check Jobs tab for progress.`;
+    statusEl.className = "status-msg ok";
+    toast("Answer generation queued");
+  } catch (e) { toast(e.message, "err"); }
 }
 
 async function generateAnswerKey() {
   const cid = parseInt($("gen-collection").value);
-  if (!cid) return toast("Select a collection", "err");
+  if (!cid) return toast("Select a collection first", "err");
   const config = {
-    bank_title: "ANSWER KEY",
+    bank_title:   "ANSWER KEY",
     subject_name: $("gen-subject-name").value,
     subject_code: $("gen-subject-code").value,
-    course: $("gen-course").value,
-    semester: $("gen-semester").value,
-    coverage: $("gen-coverage").value || "All Units",
-    group_by: $("gen-group").value,
-    notes: $("gen-notes").value,
-    watermark: { image: $("gen-wm-image").value || undefined },
+    course:       $("gen-course").value,
+    semester:     $("gen-semester").value,
+    coverage:     $("gen-coverage").value || "All Units",
+    group_by:     $("gen-group").value,
+    notes:        $("gen-notes").value,
   };
-  const r = await api("/api/collections/" + cid + "/answerkey/generate", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(config),
-  });
-  $("gen-status").textContent = "Answer key queued (job #" + r.job_id + "). Generate answers first if not done yet.";
-  toast("Answer key queued");
-}
-
-/* ---------------- jobs ---------------- */
-async function refreshJobs() {
-  const jobs = await api("/api/jobs");
-  $("jobs-list").innerHTML = jobs.map((j) => `
-    <div class="bank-item">
-      <div>
-        <b>#${j.id} ${esc(j.type)}</b> <span class="badge ${esc(j.status)}">${esc(j.status)}</span>
-        <div class="qmeta">${esc(j.created_at.slice(0, 16).replace("T", " "))}${j.error ? " · " + esc(j.error) : ""}</div>
-      </div>
-    </div>`).join("") || '<div class="status-line">No jobs.</div>';
-}
-
-/* ---------------- upload ---------------- */
-$("file-input").addEventListener("change", async (ev) => {
-  const files = Array.from(ev.target.files);
-  if (!files.length || !state.collectionId) return toast("Create/select a collection first", "err");
-  const fd = new FormData();
-  files.forEach((f) => fd.append("files", f));
-  $("upload-status").textContent = `Uploading ${files.length} file(s)...`;
+  const statusEl = $("gen-status");
   try {
-    const r = await api("/api/collections/" + state.collectionId + "/documents", { method: "POST", body: fd });
-    $("upload-status").textContent = `Uploaded ${r.uploaded.length} file(s). Processing started — watch the Jobs tab.`;
-    toast("Uploaded, processing queued");
-    setTimeout(async () => {
-      const d = await api("/api/collections/" + state.collectionId);
-      state.docs = d.documents;
-      renderDocs();
-      refreshReviewSelect();
-    }, 800);
-  } catch (e) {
-    $("upload-status").textContent = "Upload failed: " + e.message;
-  }
-  ev.target.value = "";
-});
+    const r = await api("/api/collections/" + cid + "/answerkey/generate", {
+      method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(config),
+    });
+    statusEl.textContent = `Answer Key job #${r.job_id} queued. Generate answers first if not done.`;
+    statusEl.className = "status-msg ok";
+    toast("Answer Key queued");
+    pollForBank(r.job_id);
+  } catch (e) { toast(e.message, "err"); }
+}
 
-/* ---------------- init ---------------- */
+/* ═══════════════════════════════════════════════════════════════
+   JOBS TAB
+═══════════════════════════════════════════════════════════════ */
+async function refreshJobs() {
+  try {
+    const jobs = await api("/api/jobs");
+    const el = $("jobs-list");
+    if (!jobs.length) {
+      el.innerHTML = `<div class="empty-state"><div class="es-icon">✅</div><div class="es-title">No jobs</div></div>`;
+      return;
+    }
+
+    const typeIcon = {
+      process_document: "📄",
+      generate_bank: "⚡",
+      generate_answers: "🤖",
+      generate_answerkey: "📋",
+    };
+
+    el.innerHTML = jobs.map(j => {
+      const icon = typeIcon[j.type] || "⚙️";
+      const dur = j.updated_at
+        ? Math.round((new Date(j.updated_at) - new Date(j.created_at)) / 1000)
+        : null;
+      return `<div class="job-row">
+        <span style="font-size:18px">${icon}</span>
+        <div class="job-info">
+          <div class="job-title">#${j.id} ${esc(j.type.replace(/_/g," "))}</div>
+          <div class="job-meta">
+            ${j.created_at.slice(0,16).replace("T"," ")}
+            ${dur != null && j.status === "done" ? ` · took ${dur}s` : ""}
+            ${j.error ? ` · <span style="color:var(--red)">${esc(j.error.slice(0,80))}</span>` : ""}
+          </div>
+        </div>
+        <span class="badge ${esc(j.status)}">${esc(j.status)}</span>
+      </div>`;
+    }).join("");
+
+    // Auto-refresh if any jobs are in progress
+    const inProgress = jobs.some(j => ["pending","running","processing","queued"].includes(j.status));
+    if (inProgress) {
+      clearTimeout(state._jobPollTimer);
+      state._jobPollTimer = setTimeout(() => refreshJobs(), 4000);
+    }
+  } catch (e) { toast(e.message, "err"); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   UTILITIES
+═══════════════════════════════════════════════════════════════ */
+function switchTab(name) {
+  const tab = document.querySelector(`.tab[data-tab="${name}"]`);
+  if (tab) tab.click();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════════════ */
 (async function init() {
+  checkServer();
+  setInterval(checkServer, 30000);
+
   await refreshCollections();
   if (state.collections.length) {
-    state.collectionId = state.collections[0].id;
-    const d = await api("/api/collections/" + state.collectionId);
-    state.docs = d.documents;
-    renderDocs();
-    refreshReviewSelect();
+    await selectCollection(state.collections[0].id);
   }
-  setInterval(async () => {
-    try {
-      if (state.collectionId) {
-        const d = await api("/api/collections/" + state.collectionId);
-        const changed = JSON.stringify(d.documents) !== JSON.stringify(state.docs.map((x) => ({ id: x.id, status: x.status, question_count: x.question_count })));
-        if (changed || d.documents.some((x) => ["processing", "pending"].includes(x.status))) {
-          state.docs = d.documents;
-          renderDocs();
-        }
-      }
-    } catch (e) {}
-  }, 5000);
 })();

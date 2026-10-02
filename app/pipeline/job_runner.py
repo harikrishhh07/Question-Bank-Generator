@@ -87,21 +87,26 @@ def run_job(job: Job) -> None:
 def worker_loop(once: bool = False, poll_seconds: float = 2.0) -> None:
     db = SessionLocal()
     try:
+        # On startup, reset any jobs left in 'running' state from a prior crash
+        stuck = db.query(Job).filter(Job.status == "running").all()
+        for j in stuck:
+            j.status = "queued"
+        if stuck:
+            db.commit()
+
         while True:
             job = (
                 db.query(Job)
-                .filter(Job.status.in_(["queued", "running"]))
+                .filter(Job.status.in_(["queued"]))
                 .order_by(Job.id.asc())
                 .first()
             )
-            if job and job.status == "queued":
+            if job:
                 db.expunge(job)
                 run_job(job)
-            elif not job:
+            else:
                 if once:
                     break
-                time.sleep(poll_seconds)
-            else:
                 time.sleep(poll_seconds)
     finally:
         db.close()

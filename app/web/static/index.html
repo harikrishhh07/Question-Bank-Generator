@@ -6,198 +6,562 @@
 <title>Studique QBGen</title>
 <style>
 :root {
-  --bg: #0f0f0f; --panel: #181a1b; --panel2: #1f2123; --border: #2a2c2e;
-  --text: #e8e8ea; --muted: #9aa0a6; --accent: #fe6e00; --accent-soft: #2a1a0e;
+  --bg: #0f0f0f; --panel: #181a1b; --panel2: #1f2123; --panel3: #252729;
+  --border: #2a2c2e; --border2: #333537;
+  --text: #e8e8ea; --muted: #9aa0a6; --muted2: #6b7280;
+  --accent: #fe6e00; --accent-soft: #2a1a0e; --accent-mid: #3d2010;
   --green: #22c55e; --red: #ef4444; --amber: #f59e0b; --blue: #3b82f6;
+  --radius: 10px; --radius-sm: 6px; --radius-lg: 14px;
+  --shadow: 0 4px 20px #0008;
 }
-* { box-sizing: border-box; }
-body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; }
+body {
+  font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  background: var(--bg); color: var(--text); font-size: 13px;
+  height: 100%; display: flex; flex-direction: column; overflow: hidden;
+}
 a { color: var(--accent); text-decoration: none; }
-.topbar { display: flex; align-items: center; gap: 12px; padding: 10px 20px; background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 20; }
-.logo { display: flex; align-items: center; gap: 8px; font-weight: 800; letter-spacing: .12em; color: var(--accent); font-size: 15px; }
-.logo img { width: 22px; height: 22px; border-radius: 5px; }
-.topbar .spacer { flex: 1; }
-.tab { padding: 8px 16px; border-radius: 8px; cursor: pointer; color: var(--muted); font-weight: 600; border: 1px solid transparent; }
-.tab:hover { color: var(--text); }
-.tab.active { background: var(--accent-soft); color: var(--accent); border-color: #fe6e0044; }
-.container { padding: 20px; max-width: 1400px; margin: 0 auto; }
+a:hover { text-decoration: underline; }
 .hidden { display: none !important; }
-.btn { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel2); color: var(--text); cursor: pointer; font-weight: 600; font-size: 13px; }
+
+/* ── TOPBAR ── */
+.topbar {
+  display: flex; align-items: center; gap: 0;
+  background: var(--panel); border-bottom: 1px solid var(--border);
+  padding: 0 16px; height: 52px; flex-shrink: 0; z-index: 20;
+}
+.logo {
+  display: flex; align-items: center; gap: 9px;
+  font-weight: 800; letter-spacing: .14em; color: var(--accent);
+  font-size: 14px; margin-right: 24px; white-space: nowrap;
+}
+.logo img { width: 24px; height: 24px; border-radius: 6px; }
+.nav-tabs { display: flex; gap: 2px; }
+.tab {
+  padding: 6px 14px; border-radius: var(--radius-sm); cursor: pointer;
+  color: var(--muted); font-weight: 600; font-size: 12.5px;
+  border: 1px solid transparent; transition: all .15s; white-space: nowrap;
+  display: flex; align-items: center; gap: 6px;
+}
+.tab:hover { color: var(--text); background: var(--panel2); }
+.tab.active { background: var(--accent-soft); color: var(--accent); border-color: #fe6e0033; }
+.tab .tab-icon { font-size: 14px; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+  box-shadow: 0 0 6px #22c55e88;
+}
+.status-dot.off { background: var(--red); box-shadow: 0 0 6px #ef444488; }
+
+/* ── LAYOUT ── */
+.app-body { flex: 1; display: flex; overflow: hidden; }
+.sidebar {
+  width: 300px; min-width: 240px; max-width: 340px;
+  background: var(--panel); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
+}
+.sidebar-header {
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 700; font-size: 12px; color: var(--muted);
+  letter-spacing: .08em; text-transform: uppercase;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.sidebar-body { flex: 1; overflow-y: auto; padding: 8px; }
+.main-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+.content-area { flex: 1; overflow-y: auto; padding: 18px; }
+
+/* ── BUTTONS ── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--panel2);
+  color: var(--text); cursor: pointer; font-weight: 600;
+  font-size: 12.5px; transition: all .15s; white-space: nowrap;
+  font-family: inherit;
+}
 .btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn:disabled:hover { border-color: var(--border); color: var(--text); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn.primary:hover { filter: brightness(1.1); color: #fff; }
-.btn.green { background: #16a34a33; border-color: #22c55e88; color: #4ade80; }
-.btn.red { background: #ef444422; border-color: #ef444488; color: #f87171; }
-.btn.small { padding: 4px 10px; font-size: 12px; }
-input, textarea, select { background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; width: 100%; }
+.btn.primary:hover { filter: brightness(1.12); color: #fff; }
+.btn.green { background: #16a34a22; border-color: #22c55e66; color: #4ade80; }
+.btn.green:hover { background: #16a34a44; }
+.btn.red { background: #ef444416; border-color: #ef444466; color: #f87171; }
+.btn.red:hover { background: #ef444428; }
+.btn.amber { background: #f59e0b16; border-color: #f59e0b66; color: #fbbf24; }
+.btn.sm { padding: 4px 10px; font-size: 11.5px; }
+.btn.icon { padding: 6px; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* ── FORM ── */
+input, textarea, select {
+  background: var(--panel2); border: 1px solid var(--border);
+  color: var(--text); border-radius: var(--radius-sm);
+  padding: 8px 10px; font-size: 13px; font-family: inherit;
+  width: 100%; transition: border-color .15s; outline: none;
+}
+input:focus, textarea:focus, select:focus { border-color: var(--accent); }
 textarea { resize: vertical; }
-label { font-size: 12px; color: var(--muted); display: block; margin: 10px 0 4px; font-weight: 600; }
-.card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-.card h2 { margin: 0 0 12px; font-size: 15px; }
-.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.row.top { align-items: flex-start; }
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.grid3 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
-.col { min-width: 0; }
-.badge { padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; }
-.badge.done { background: #22c55e22; color: #4ade80; }
-.badge.pending { background: #f59e0b22; color: var(--amber); }
-.badge.processing { background: #3b82f622; color: #60a5fa; }
-.badge.error { background: #ef444422; color: #f87171; }
-.badge.review { background: #f59e0b22; color: var(--amber); }
-.badge.approved { background: #22c55e22; color: #4ade80; }
-.badge.rejected { background: #ef444422; color: #f87171; }
-.doc-item { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; background: var(--panel2); cursor: pointer; }
-.doc-item:hover { border-color: var(--accent); }
-.doc-item.selected { border-color: var(--accent); background: var(--accent-soft); }
-.q-item { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; cursor: pointer; background: var(--panel2); }
-.q-item:hover { border-color: var(--accent); }
-.q-item.selected { border-color: var(--accent); background: var(--accent-soft); }
-.q-item .qnum { font-weight: 800; color: var(--accent); }
-.q-item .qmeta { color: var(--muted); font-size: 12px; margin-top: 3px; }
-.flag { font-size: 11px; color: var(--amber); background: #f59e0b11; border: 1px solid #f59e0b44; border-radius: 6px; padding: 2px 8px; margin: 3px 0; display: block; }
-.media-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-.media-thumb { position: relative; width: 110px; border: 2px solid var(--border); border-radius: 8px; overflow: hidden; cursor: pointer; background: #fff; }
-.media-thumb img { width: 100%; height: 70px; object-fit: contain; display: block; }
-.media-thumb.attached { border-color: var(--accent); }
-.media-thumb .tag { position: absolute; top: 3px; left: 3px; background: #000c; color: #fff; font-size: 9px; padding: 1px 5px; border-radius: 4px; }
-.page-view { margin-top: 12px; }
-.page-view img { width: 100%; border: 1px solid var(--border); border-radius: 8px; }
-.page-select { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
-.page-btn { padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel2); color: var(--muted); cursor: pointer; font-size: 12px; }
-.page-btn.active { border-color: var(--accent); color: var(--accent); }
-.sub-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
-.sub-row input { flex: 1; }
-.sub-row .lbl { max-width: 60px; }
-.sub-row .mk { max-width: 60px; }
-.sub-row .orbox { max-width: 90px; display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); white-space: nowrap; }
-.opt-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
-.status-line { color: var(--muted); font-size: 12px; }
-.status-line b { color: var(--text); }
-.pill { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; background: var(--panel2); border: 1px solid var(--border); margin-right: 6px; margin-bottom: 4px; }
-.dropzone { border: 2px dashed var(--border); border-radius: 12px; padding: 24px; text-align: center; color: var(--muted); cursor: pointer; }
-.dropzone:hover { border-color: var(--accent); color: var(--text); }
+.label {
+  font-size: 11.5px; color: var(--muted); display: block;
+  margin: 10px 0 4px; font-weight: 600; letter-spacing: .04em;
+}
+.form-row { display: flex; gap: 10px; }
+.form-row > * { flex: 1; min-width: 0; }
+.field { margin-bottom: 4px; }
+
+/* ── CARDS ── */
+.card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; margin-bottom: 14px;
+}
+.card-title {
+  font-size: 13.5px; font-weight: 700; margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.section-title {
+  font-size: 15px; font-weight: 700; margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* ── GRID ── */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.grid3 { display: grid; grid-template-columns: 280px 1fr; gap: 14px; }
+@media (max-width: 900px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+
+/* ── BADGES ── */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 20px;
+  font-size: 11px; font-weight: 700; white-space: nowrap;
+}
+.badge.done    { background: #22c55e18; color: #4ade80; border: 1px solid #22c55e33; }
+.badge.pending { background: #f59e0b18; color: #fbbf24; border: 1px solid #f59e0b33; }
+.badge.running,
+.badge.processing { background: #3b82f618; color: #60a5fa; border: 1px solid #3b82f633;
+  animation: pulse 2s infinite; }
+.badge.error   { background: #ef444418; color: #f87171; border: 1px solid #ef444433; }
+.badge.review  { background: #f59e0b18; color: #fbbf24; border: 1px solid #f59e0b33; }
+.badge.approved{ background: #22c55e18; color: #4ade80; border: 1px solid #22c55e33; }
+.badge.rejected{ background: #ef444418; color: #f87171; border: 1px solid #ef444433; }
+.badge.queued  { background: #6b728018; color: #9ca3af; border: 1px solid #6b728033; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+
+/* ── LIST ITEMS ── */
+.list-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: var(--radius); margin-bottom: 6px;
+  background: var(--panel2); cursor: pointer; transition: all .15s;
+}
+.list-item:hover { border-color: #fe6e0055; background: var(--accent-soft); }
+.list-item.active { border-color: var(--accent); background: var(--accent-soft); }
+.list-item .li-icon { font-size: 16px; flex-shrink: 0; }
+.list-item .li-body { flex: 1; min-width: 0; }
+.li-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.li-meta { color: var(--muted); font-size: 11.5px; margin-top: 1px; }
+.li-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+/* ── QUESTION ITEMS ── */
+.q-item {
+  padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: var(--radius); margin-bottom: 5px;
+  background: var(--panel2); cursor: pointer; transition: all .15s;
+}
+.q-item:hover { border-color: #fe6e0055; }
+.q-item.active { border-color: var(--accent); background: var(--accent-soft); }
+.q-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+.q-num { font-weight: 800; color: var(--accent); font-size: 13px; }
+.q-text-preview {
+  font-size: 12px; color: var(--muted); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.q-item-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+/* ── DETAIL PANEL ── */
+.detail-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; border-bottom: 1px solid var(--border);
+  background: var(--panel); flex-shrink: 0;
+}
+.detail-body { flex: 1; overflow-y: auto; padding: 14px; }
+
+/* ── DROPZONE ── */
+.dropzone {
+  border: 2px dashed var(--border2); border-radius: var(--radius);
+  padding: 28px 20px; text-align: center; color: var(--muted);
+  cursor: pointer; transition: all .15s;
+}
+.dropzone:hover { border-color: var(--accent); color: var(--text); background: var(--accent-soft); }
+.dropzone.dragover { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone .dz-icon { font-size: 32px; margin-bottom: 8px; }
+.dropzone b { color: var(--text); }
 input[type=file] { display: none; }
-.toast { position: fixed; bottom: 20px; right: 20px; background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 18px; z-index: 100; box-shadow: 0 8px 30px #000a; }
-.toast.ok { border-color: var(--green); }
-.toast.err { border-color: var(--red); }
-pre.json { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 11px; overflow: auto; max-height: 400px; }
-.bank-item { display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; background: var(--panel2); }
-.mono { font-family: ui-monospace, Consolas, monospace; }
+
+/* ── TOAST ── */
+#toast-container {
+  position: fixed; bottom: 20px; right: 20px;
+  z-index: 9999; display: flex; flex-direction: column; gap: 8px;
+}
+.toast {
+  background: var(--panel2); border: 1px solid var(--border2);
+  border-radius: var(--radius); padding: 11px 16px;
+  box-shadow: var(--shadow); font-size: 13px;
+  display: flex; align-items: center; gap: 8px;
+  animation: slideIn .2s ease; max-width: 320px;
+}
+.toast.ok   { border-color: #22c55e66; }
+.toast.err  { border-color: #ef444466; }
+.toast.warn { border-color: #f59e0b66; }
+@keyframes slideIn { from{transform:translateX(20px);opacity:0} to{transform:translateX(0);opacity:1} }
+
+/* ── STATUS LINE ── */
+.status-msg { font-size: 12px; color: var(--muted); margin-top: 8px; min-height: 18px; }
+.status-msg.ok { color: #4ade80; }
+.status-msg.err { color: #f87171; }
+
+/* ── PILL ── */
+.pill {
+  display: inline-block; padding: 2px 7px; border-radius: 5px;
+  font-size: 11px; background: var(--panel2); border: 1px solid var(--border);
+  margin-right: 4px; margin-bottom: 3px;
+}
+
+/* ── PROGRESS BAR ── */
+.progress-bar {
+  height: 4px; background: var(--panel2); border-radius: 2px; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; background: var(--accent); border-radius: 2px;
+  transition: width .4s ease;
+}
+
+/* ── PAGE STRIP ── */
+.page-strip { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 10px; }
+.page-btn {
+  padding: 3px 9px; border: 1px solid var(--border);
+  border-radius: 5px; background: var(--panel2); color: var(--muted);
+  cursor: pointer; font-size: 12px; transition: all .15s;
+}
+.page-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+/* ── MEDIA GRID ── */
+.media-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.media-thumb {
+  position: relative; width: 100px; border: 2px solid var(--border);
+  border-radius: var(--radius-sm); overflow: hidden; cursor: pointer;
+  background: #fff; transition: border-color .15s;
+}
+.media-thumb img { width: 100%; height: 64px; object-fit: contain; display: block; }
+.media-thumb:hover { border-color: #fe6e0077; }
+.media-thumb.attached { border-color: var(--accent); }
+.media-thumb .mt-tag {
+  position: absolute; top: 2px; left: 2px;
+  background: #000c; color: #fff; font-size: 9px;
+  padding: 1px 4px; border-radius: 3px;
+}
+
+/* ── SUB / OPTION ROWS ── */
+.sub-row {
+  display: flex; gap: 6px; align-items: center; margin-bottom: 5px;
+}
+.sub-row .sub-lbl { width: 52px; flex-shrink: 0; }
+.sub-row .sub-txt { flex: 1; }
+.sub-row .sub-mk  { width: 58px; flex-shrink: 0; }
+.sub-row .sub-or  { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+.opt-row { display: flex; gap: 6px; align-items: center; margin-bottom: 5px; }
+.opt-row .opt-lbl { width: 22px; font-weight: 700; color: var(--accent); flex-shrink: 0; }
+.opt-row .opt-in  { flex: 1; }
+
+/* ── FLAG ── */
+.flag {
+  font-size: 11px; color: var(--amber); background: #f59e0b10;
+  border: 1px solid #f59e0b33; border-radius: 5px;
+  padding: 2px 8px; margin: 2px 0; display: inline-block;
+}
+
+/* ── DIVIDER ── */
+hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+
+/* ── CONFIDENCE BAR ── */
+.conf-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.conf-label { font-size: 11px; color: var(--muted); width: 60px; flex-shrink: 0; }
+.conf-bar { flex: 1; height: 5px; background: var(--panel2); border-radius: 3px; overflow: hidden; }
+.conf-fill { height: 100%; border-radius: 3px; }
+.conf-val { font-size: 11px; color: var(--muted); width: 32px; text-align: right; flex-shrink: 0; }
+
+/* ── STATS ── */
+.stats-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.stat-chip {
+  background: var(--panel2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 14px;
+  flex: 1; min-width: 80px; text-align: center;
+}
+.stat-val { font-size: 22px; font-weight: 800; color: var(--accent); line-height: 1; }
+.stat-lbl { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+/* ── BANK LIST ── */
+.bank-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 13px; border: 1px solid var(--border);
+  border-radius: var(--radius); margin-bottom: 6px; background: var(--panel2);
+}
+.bank-row .bank-info { flex: 1; min-width: 0; }
+.bank-row .bank-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bank-row .bank-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.bank-row .bank-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+/* ── JOB LIST ── */
+.job-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: var(--radius); margin-bottom: 5px; background: var(--panel2);
+}
+.job-row .job-info { flex: 1; min-width: 0; }
+.job-row .job-title { font-weight: 600; font-size: 13px; }
+.job-row .job-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #555; }
+
+/* ── SPLIT PANEL ── */
+.split { display: flex; height: 100%; overflow: hidden; gap: 0; }
+.split-left { width: 320px; flex-shrink: 0; border-right: 1px solid var(--border); overflow-y: auto; padding: 12px; }
+.split-right { flex: 1; overflow-y: auto; padding: 14px; }
+
+/* ── GENERATE TAB ── */
+.gen-section { margin-bottom: 18px; }
+.gen-section .gen-section-title {
+  font-size: 12px; font-weight: 700; color: var(--muted);
+  letter-spacing: .08em; text-transform: uppercase;
+  border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 10px;
+}
+
+/* ── EMPTY STATE ── */
+.empty-state {
+  text-align: center; padding: 40px 20px; color: var(--muted2);
+}
+.empty-state .es-icon { font-size: 36px; margin-bottom: 10px; }
+.empty-state .es-title { font-size: 14px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+.empty-state .es-sub { font-size: 12.5px; }
+
+/* ── TOOLTIP-STYLE INFO ── */
+.info-box {
+  background: var(--panel2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 12px;
+  font-size: 12px; color: var(--muted); margin-bottom: 8px;
+}
+.info-box.warn { border-color: #f59e0b55; color: #fbbf24; background: #f59e0b0a; }
+.info-box.success { border-color: #22c55e55; color: #4ade80; background: #22c55e0a; }
+
+/* ── PDF VIEWER ── */
+.page-img { width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-top: 8px; }
+
+/* ── COLLECTIONS TAB EMPTY ── */
+#col-empty { padding: 12px 0; }
+
+/* ── INLINE MATH PREVIEW HINT ── */
+.math-hint { font-size: 11px; color: var(--muted2); font-style: italic; margin-top: 3px; }
 </style>
 </head>
 <body>
 
+<!-- TOPBAR -->
 <div class="topbar">
-  <div class="logo"><img src="/files/assets/studique-logo.png" onerror="this.style.display='none'"><span>STUDIQUE&nbsp;QBGEN</span></div>
-  <div class="spacer"></div>
-  <div class="tab active" data-tab="collections">Collections</div>
-  <div class="tab" data-tab="review">Review</div>
-  <div class="tab" data-tab="generate">Generate</div>
-  <div class="tab" data-tab="jobs">Jobs</div>
+  <div class="logo">
+    <img src="/files/assets/studique-logo.png" onerror="this.style.display='none'" alt="S">
+    <span>STUDIQUE&nbsp;QBGEN</span>
+  </div>
+  <nav class="nav-tabs">
+    <div class="tab active" data-tab="collections"><span class="tab-icon">📁</span> Collections</div>
+    <div class="tab" data-tab="review"><span class="tab-icon">🔍</span> Review</div>
+    <div class="tab" data-tab="generate"><span class="tab-icon">⚡</span> Generate</div>
+    <div class="tab" data-tab="jobs"><span class="tab-icon">⚙️</span> Jobs</div>
+  </nav>
+  <div class="topbar-right">
+    <div id="server-dot" class="status-dot" title="Server online"></div>
+    <span id="server-label" style="font-size:11.5px;color:var(--muted)">Online</span>
+  </div>
 </div>
 
-<div class="container">
+<div class="app-body">
 
-  <!-- ================= COLLECTIONS ================= -->
-  <div id="tab-collections" class="tab-pane">
-    <div class="grid2">
-      <div class="card">
-        <h2>Collections</h2>
-        <div class="row" style="margin-bottom:12px">
-          <input id="new-col-name" placeholder="Collection name (e.g. ACCA PYQs)" style="flex:1">
-          <button class="btn primary" onclick="createCollection()">Create</button>
-        </div>
-        <div id="collection-list"></div>
-      </div>
-      <div class="card">
-        <h2 id="col-title">Upload Question Papers</h2>
-        <div class="dropzone" onclick="document.getElementById('file-input').click()">
-          <p><b>Click to select PYQ PDFs</b><br>Multiple files allowed</p>
-        </div>
-        <input type="file" id="file-input" multiple accept=".pdf">
-        <div id="upload-status" class="status-line" style="margin-top:10px"></div>
-        <div id="docs-list" style="margin-top:14px"></div>
-      </div>
-    </div>
-  </div>
+<!-- ══════════════════════════════════════════════
+     COLLECTIONS TAB
+══════════════════════════════════════════════════ -->
+<div id="tab-collections" class="main-content tab-pane">
+  <div class="split" style="height:100%">
 
-  <!-- ================= REVIEW ================= -->
-  <div id="tab-review" class="tab-pane hidden">
-    <div class="grid3">
-      <div class="col">
-        <div class="card">
-          <h2>Documents</h2>
-          <select id="rv-doc-select"></select>
-          <div id="rv-docs" style="margin-top:12px"></div>
+    <!-- LEFT: collection list -->
+    <div class="split-left" style="width:280px">
+      <div style="margin-bottom:10px">
+        <div class="label" style="margin-top:0">New Collection</div>
+        <div class="btn-row">
+          <input id="new-col-name" placeholder="e.g. ACCA PYQs" style="flex:1">
+          <button class="btn primary sm" onclick="createCollection()">Create</button>
         </div>
       </div>
-      <div class="col" style="grid-column: span 2">
-        <div class="card" id="rv-qlist-card">
-          <h2>Questions <span id="rv-qcount" class="pill"></span></h2>
-          <div id="rv-qlist"></div>
-        </div>
-        <div class="card" id="rv-detail-card">
-          <div id="rv-detail"></div>
-          <div id="rv-page" class="page-view"></div>
+      <hr>
+      <div id="collection-list">
+        <div class="empty-state">
+          <div class="es-icon">📚</div>
+          <div class="es-title">No collections</div>
+          <div class="es-sub">Create one to get started</div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- ================= GENERATE ================= -->
-  <div id="tab-generate" class="tab-pane hidden">
-    <div class="grid2">
-      <div class="card">
-        <h2>Question Bank Configuration</h2>
-        <label>Collection</label>
+    <!-- RIGHT: documents in selected collection -->
+    <div class="split-right">
+      <div id="col-detail">
+        <div class="empty-state" style="margin-top:60px">
+          <div class="es-icon">👈</div>
+          <div class="es-title">Select a collection</div>
+          <div class="es-sub">Pick one from the left panel to view its papers</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     REVIEW TAB
+══════════════════════════════════════════════════ -->
+<div id="tab-review" class="main-content tab-pane hidden">
+  <div class="split" style="height:100%">
+
+    <!-- LEFT: doc + question list -->
+    <div class="split-left">
+      <div class="field" style="margin-bottom:10px">
+        <div class="label" style="margin-top:0">Document</div>
+        <select id="rv-doc-select" onchange="onRvDocChange()"></select>
+      </div>
+      <div id="rv-stats" style="margin-bottom:10px"></div>
+      <div id="rv-qlist">
+        <div class="empty-state">
+          <div class="es-icon">📋</div>
+          <div class="es-title">No questions</div>
+          <div class="es-sub">Upload &amp; process a PDF first</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: question detail -->
+    <div class="split-right" id="rv-detail-panel">
+      <div class="empty-state" style="margin-top:60px">
+        <div class="es-icon">⬅️</div>
+        <div class="es-title">Select a question</div>
+        <div class="es-sub">Click any question to review and edit it</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     GENERATE TAB
+══════════════════════════════════════════════════ -->
+<div id="tab-generate" class="main-content tab-pane hidden">
+  <div class="split" style="height:100%">
+
+    <!-- LEFT: config form -->
+    <div class="split-left" style="width:340px">
+      <div class="gen-section">
+        <div class="gen-section-title">Collection</div>
         <select id="gen-collection"></select>
-        <label>Bank Title</label>
+      </div>
+
+      <div class="gen-section">
+        <div class="gen-section-title">Bank Details</div>
+        <div class="label" style="margin-top:0">Bank Title</div>
         <input id="gen-title" placeholder="QUESTION BANK">
-        <label>Subject Name (override, blank = auto-detect)</label>
-        <input id="gen-subject-name">
-        <label>Subject Code (override)</label>
-        <input id="gen-subject-code">
-        <label>Course</label>
-        <input id="gen-course" placeholder="B.Tech / M.Tech">
-        <label>Semester</label>
-        <input id="gen-semester">
-        <label>Coverage (e.g. All Units)</label>
-        <input id="gen-coverage" value="All Units">
-        <label>Group Questions By</label>
+        <div class="form-row" style="margin-top:8px">
+          <div>
+            <div class="label" style="margin-top:0">Subject Code</div>
+            <input id="gen-subject-code" placeholder="CS3501">
+          </div>
+          <div>
+            <div class="label" style="margin-top:0">Semester</div>
+            <input id="gen-semester" placeholder="V">
+          </div>
+        </div>
+        <div class="label">Subject Name (override)</div>
+        <input id="gen-subject-name" placeholder="Auto-detect from papers">
+        <div class="form-row" style="margin-top:8px">
+          <div>
+            <div class="label" style="margin-top:0">Course</div>
+            <input id="gen-course" placeholder="B.Tech">
+          </div>
+          <div>
+            <div class="label" style="margin-top:0">Coverage</div>
+            <input id="gen-coverage" value="All Units">
+          </div>
+        </div>
+      </div>
+
+      <div class="gen-section">
+        <div class="gen-section-title">Layout Options</div>
+        <div class="label" style="margin-top:0">Group Questions By</div>
         <select id="gen-group">
-          <option value="part">Part (A/B/C)</option>
+          <option value="part">Part (A / B / C)</option>
           <option value="year">Year</option>
-          <option value="type">Question Type</option>
+          <option value="type">Question Type (MCQ / Descriptive)</option>
           <option value="none">Single List</option>
         </select>
-        <label>Notes / Instructions</label>
-        <textarea id="gen-notes" rows="2"></textarea>
-        <label>Watermark image (optional override)</label>
-        <input id="gen-wm-image" placeholder="assets/studique-logo.png">
-        <div style="margin-top:16px" class="row">
-          <button class="btn primary" onclick="generateBank()">Generate Question Bank</button>
-          <button class="btn" onclick="generateAnswers()">Generate Answers</button>
-          <button class="btn" onclick="generateAnswerKey()">Generate Answer Key PDF</button>
+        <div class="label">Notes / Instructions</div>
+        <textarea id="gen-notes" rows="2" placeholder="Any special notes for this bank…"></textarea>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn primary" onclick="generateBank()" style="flex:1">⚡ Generate Bank</button>
+      </div>
+      <div class="btn-row" style="margin-top:6px">
+        <button class="btn" onclick="generateAnswers()" style="flex:1">🤖 Generate Answers</button>
+        <button class="btn" onclick="generateAnswerKey()" style="flex:1">📋 Answer Key PDF</button>
+      </div>
+      <div id="gen-status" class="status-msg"></div>
+    </div>
+
+    <!-- RIGHT: generated banks list -->
+    <div class="split-right">
+      <div class="section-title">📄 Generated Banks</div>
+      <div id="bank-list">
+        <div class="empty-state">
+          <div class="es-icon">📄</div>
+          <div class="es-title">No banks yet</div>
+          <div class="es-sub">Configure and click Generate Bank</div>
         </div>
-        <div id="gen-status" class="status-line" style="margin-top:10px"></div>
-      </div>
-      <div class="card">
-        <h2>Generated Banks</h2>
-        <div id="bank-list"></div>
       </div>
     </div>
-  </div>
 
-  <!-- ================= JOBS ================= -->
-  <div id="tab-jobs" class="tab-pane hidden">
-    <div class="card">
-      <h2>Processing Jobs</h2>
-      <div id="jobs-list"></div>
-    </div>
   </div>
-
 </div>
+
+<!-- ══════════════════════════════════════════════
+     JOBS TAB
+══════════════════════════════════════════════════ -->
+<div id="tab-jobs" class="main-content tab-pane hidden">
+  <div class="content-area">
+    <div class="section-title">
+      ⚙️ Processing Jobs
+      <button class="btn sm" onclick="refreshJobs()" style="margin-left:auto">↻ Refresh</button>
+    </div>
+    <div id="jobs-list">
+      <div class="empty-state"><div class="es-icon">✅</div><div class="es-title">No jobs</div></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- app-body -->
+
+<!-- TOAST CONTAINER -->
+<div id="toast-container"></div>
 
 <script src="/static/app.js"></script>
 </body>

@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
+from typing import Optional
 
 from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -28,19 +31,19 @@ class Document(Base):
     filename: Mapped[str] = mapped_column(String(500))
     storage_key: Mapped[str] = mapped_column(String(500))
 
-    subject_code: Mapped[str | None] = mapped_column(String(100))
-    subject_name: Mapped[str | None] = mapped_column(String(300))
-    exam_session: Mapped[str | None] = mapped_column(String(100))
-    semester: Mapped[str | None] = mapped_column(String(100))
-    year: Mapped[int | None] = mapped_column(Integer)
-    time_limit: Mapped[str | None] = mapped_column(String(50))
-    max_marks: Mapped[str | None] = mapped_column(String(50))
-    degree: Mapped[str | None] = mapped_column(String(200))
+    subject_code: Mapped[Optional[str]] = mapped_column(String(100))
+    subject_name: Mapped[Optional[str]] = mapped_column(String(300))
+    exam_session: Mapped[Optional[str]] = mapped_column(String(100))
+    semester: Mapped[Optional[str]] = mapped_column(String(100))
+    year: Mapped[Optional[int]] = mapped_column(Integer)
+    time_limit: Mapped[Optional[str]] = mapped_column(String(50))
+    max_marks: Mapped[Optional[str]] = mapped_column(String(50))
+    degree: Mapped[Optional[str]] = mapped_column(String(200))
 
     page_count: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(50), default="pending")  # pending|processing|done|error
     meta: Mapped[dict] = mapped_column(JSON, default=dict)
-    error: Mapped[str | None] = mapped_column(Text)
+    error: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
 
@@ -60,7 +63,7 @@ class Page(Base):
     height: Mapped[int] = mapped_column(Integer)
     render_key: Mapped[str] = mapped_column(String(500))
     has_text_layer: Mapped[bool] = mapped_column(default=False)
-    text_layer: Mapped[str | None] = mapped_column(Text)
+    text_layer: Mapped[Optional[str]] = mapped_column(Text)
     ocr_conf: Mapped[float] = mapped_column(Float, default=0.0)
 
     document: Mapped["Document"] = relationship(back_populates="pages")
@@ -75,8 +78,8 @@ class MediaItem(Base):
     media_type: Mapped[str] = mapped_column(String(50))  # figure|table|equation|image
     bbox: Mapped[list] = mapped_column(JSON)  # [x0,y0,x1,y1] normalized 0-1
     orig_key: Mapped[str] = mapped_column(String(500))
-    thumb_key: Mapped[str | None] = mapped_column(String(500))
-    caption: Mapped[str | None] = mapped_column(Text)
+    thumb_key: Mapped[Optional[str]] = mapped_column(String(500))
+    caption: Mapped[Optional[str]] = mapped_column(Text)
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
     shared: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
@@ -91,13 +94,13 @@ class Question(Base):
     document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"), index=True)
     page_ids: Mapped[list] = mapped_column(JSON, default=list)
 
-    part: Mapped[str | None] = mapped_column(String(20))
-    number: Mapped[str | None] = mapped_column(String(50))
-    numbering: Mapped[str | None] = mapped_column(String(50))
-    title: Mapped[str | None] = mapped_column(String(300))
-    marks: Mapped[int | None] = mapped_column(Integer)
+    part: Mapped[Optional[str]] = mapped_column(String(20))
+    number: Mapped[Optional[str]] = mapped_column(String(50))
+    numbering: Mapped[Optional[str]] = mapped_column(String(50))
+    title: Mapped[Optional[str]] = mapped_column(String(300))
+    marks: Mapped[Optional[int]] = mapped_column(Integer)
 
-    text: Mapped[str | None] = mapped_column(Text)
+    text: Mapped[Optional[str]] = mapped_column(Text)
     options: Mapped[list] = mapped_column(JSON, default=list)  # MCQ options
     subs: Mapped[list] = mapped_column(JSON, default=list)  # subquestions
     media_ids: Mapped[list] = mapped_column(JSON, default=list)
@@ -123,7 +126,7 @@ class QuestionVersion(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     question_id: Mapped[int] = mapped_column(ForeignKey("questions.id"), index=True)
     snapshot: Mapped[dict] = mapped_column(JSON)
-    reason: Mapped[str | None] = mapped_column(String(300))
+    reason: Mapped[Optional[str]] = mapped_column(String(300))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
     question: Mapped["Question"] = relationship(back_populates="versions")
@@ -137,7 +140,7 @@ class Job(Base):
     status: Mapped[str] = mapped_column(String(50), default="queued")  # queued|running|done|error
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     result: Mapped[dict] = mapped_column(JSON, default=dict)
-    error: Mapped[str | None] = mapped_column(Text)
+    error: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
 
@@ -150,7 +153,7 @@ class QbGeneration(Base):
     name: Mapped[str] = mapped_column(String(300))
     template: Mapped[str] = mapped_column(String(100), default="standard")
     config: Mapped[dict] = mapped_column(JSON, default=dict)
-    output_key: Mapped[str | None] = mapped_column(String(500))
+    output_key: Mapped[Optional[str]] = mapped_column(String(500))
     question_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
@@ -162,8 +165,8 @@ class Answer(Base):
     question_id: Mapped[int] = mapped_column(ForeignKey("questions.id"), index=True, unique=True)
     content: Mapped[dict] = mapped_column(JSON, default=dict)  # {steps: [...], final_answer: "...", correct_option: "A"}
     status: Mapped[str] = mapped_column(String(30), default="pending")  # pending|generated|error
-    error: Mapped[str | None] = mapped_column(Text)
-    model: Mapped[str | None] = mapped_column(String(100))
+    error: Mapped[Optional[str]] = mapped_column(Text)
+    model: Mapped[Optional[str]] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
 
@@ -179,6 +182,6 @@ class AnswerGeneration(Base):
     status: Mapped[str] = mapped_column(String(30), default="pending")  # pending|running|done|error
     total: Mapped[int] = mapped_column(Integer, default=0)
     completed: Mapped[int] = mapped_column(Integer, default=0)
-    error: Mapped[str | None] = mapped_column(Text)
+    error: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)

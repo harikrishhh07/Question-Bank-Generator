@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -70,6 +72,9 @@ def generate_answerkey(db: Session, collection_id: int, config: dict) -> dict:
     template = env.get_template("answerkey/template.html.j2")
     html = template.render(css=css, **context)
     html = html.replace("@page {", "@page { size: A4;", 1)
+    # Fix MathJax path: replace relative ../mathjax/ with absolute file:// URI
+    mathjax_dir = (TEMPLATES_DIR / "mathjax").resolve().as_uri()
+    html = html.replace("../mathjax/", mathjax_dir + "/")
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     name = config.get("bank_title") or "Answer_Key"

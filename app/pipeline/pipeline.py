@@ -48,7 +48,9 @@ def process_document(db: Session, document: Document, source_path: Path) -> dict
         render_paths = [storage.path(p["render_key"]) for p in pages]
         page_results = []
         for i, rp in enumerate(render_paths):
-            raw = doc_understand.understand_page(rp, i, len(render_paths))
+            # Pass OCR/text layer as hint so math-heavy pages auto-upgrade to the strong model
+            text_hint = page_rows[i].text_layer if i < len(page_rows) else None
+            raw = doc_understand.understand_page(rp, i, len(render_paths), text_hint=text_hint)
             normalized = doc_understand.normalize_page_result(raw)
             if _has_empty_questions(normalized):
                 raw2 = doc_understand.understand_page(rp, i, len(render_paths), strong=True)
@@ -129,9 +131,9 @@ def process_document(db: Session, document: Document, source_path: Path) -> dict
                     if r.id not in media_ids:
                         media_ids.append(r.id)
 
-            for mi in assoc["shared_media"]:
-                if mi < len(all_media):
-                    all_media[mi]["row"].shared = True
+            for shared_idx in assoc["shared_media"]:
+                if shared_idx < len(all_media):
+                    all_media[shared_idx]["row"].shared = True
 
             conf = validate.compute_confidence(q)
             flags = q.get("flags") or []
@@ -160,9 +162,10 @@ def process_document(db: Session, document: Document, source_path: Path) -> dict
             )
             db.add(q_row)
 
-        # Deduplicate shared marking
-        for mrow in all_media:
-            pass
+        # Mark shared media items
+        for shared_mi in assoc["shared_media"]:
+            if shared_mi < len(all_media):
+                all_media[shared_mi]["row"].shared = True
 
         db.flush()
         db.commit()

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
 import re
 
@@ -170,6 +172,8 @@ def _assign_seq_nums(qs):
             "flags": list(q.flags or []),
             "document": q.document,
             "source_label": _source_label(q.document),
+            "_sources": [],        # populated by _deduplicate_repeated
+            "_repeat_count": 1,    # default; updated by _deduplicate_repeated
         }
         q_dicts.append(q_dict)
     # deduplicate repeated questions across papers (same question in multiple years)

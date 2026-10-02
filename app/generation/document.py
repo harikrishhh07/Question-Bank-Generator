@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2 import Environment, FileSystemLoader
 from sqlalchemy.orm import Session
 
 from ..config import BASE_DIR, settings
@@ -13,7 +15,7 @@ KATEX_DIR = TEMPLATES_DIR / "katex"
 
 _env = Environment(
     loader=FileSystemLoader(str(TEMPLATES_DIR)),
-    autoescape=select_autoescape(["html"]),
+    autoescape=False,  # Math LaTeX (backslashes, braces) must not be HTML-escaped
 )
 
 
@@ -45,29 +47,30 @@ def generate_pdf(html: str, output_path: Path, logo_url: str | None = None, subj
     tmp_html.write_text(html, encoding="utf-8")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        browser = p.chromium.launch(args=["--single-process", "--no-sandbox"])
         page = browser.new_page()
         page.goto(tmp_html.resolve().as_uri(), wait_until="networkidle")
         if "tex-chtml.js" in html:
             # MathJax typesets automatically after load; give it time (async, ~3-5s for large docs)
             page.wait_for_timeout(6000)
         else:
-            page.evaluate(
-                """() => {
-                    if (typeof renderMathInElement === 'function') {
-                        renderMathInElement(document.body, {
-                            delimiters: [
-                                {left: '\\\\\\(', right: '\\\\\\)', display: false},
-                                {left: '\\\\\\\\(', right: '\\\\\\\\\\)', display: false},
-                                {left: '\\\\[', right: '\\\\]', display: true},
-                                {left: '\\\\\\[', right: '\\\\\\\\]', display: true},
-                            ],
-                            throwOnError: false
-                        });
-                    }
-                }"""
-            )
-            page.wait_for_timeout(500)
+            # KaTeX auto-render: call renderMathInElement with correct delimiters.
+            # Using page.evaluate with a JS function avoids Python escape-layer issues.
+            page.evaluate("""() => {
+                if (typeof renderMathInElement === 'function') {
+                    renderMathInElement(document.body, {
+                        delimiters: [
+                            {left: '\\\\(', right: '\\\\)', display: false},
+                            {left: '\\\\[', right: '\\\\]', display: true},
+                            {left: '$$', right: '$$', display: true},
+                            {left: '$', right: '$', display: false}
+                        ],
+                        throwOnError: false,
+                        errorColor: '#cc0000'
+                    });
+                }
+            }""")
+            page.wait_for_timeout(800)
         page.pdf(
             path=str(output_path),
             format="A4",
