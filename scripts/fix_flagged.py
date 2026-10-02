@@ -1,5 +1,7 @@
 import sys, re
-sys.path.insert(0, r"C:\Users\1406u\OneDrive\Desktop\Utkarsh\Workstation\qbgen")
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.db import SessionLocal
 from app.models import Question
 from app.generation.context import _group_questions
