@@ -3,7 +3,7 @@
 html, body {
   margin: 0; padding: 0;
   font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  font-size: 10.5pt; color: #1a1a1a; line-height: 1.5;
+  font-size: 10.5pt; color: #1a1a1a; line-height: 1.6;
 }
 .watermark-layer {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -49,9 +49,14 @@ html, body {
 }
 
 /* Question header */
-.q-head { display: flex; align-items: flex-start; gap: 2.5mm; margin-bottom: 1mm; }
-.q-num { font-weight: 800; font-size: 11.5pt; color: #b34d00; flex-shrink: 0; line-height: 1.5; }
-.q-text { flex: 1; min-width: 0; font-size: 10.5pt; color: #222; }
+.q-head { display: flex; align-items: flex-start; gap: 2.5mm; margin-bottom: 1.5mm; }
+.q-num { font-weight: 800; font-size: 11.5pt; color: #b34d00; flex-shrink: 0; line-height: 1.6; }
+.q-text {
+  flex: 1; min-width: 0; font-size: 10.5pt; color: #222;
+  line-height: 1.65;
+  word-spacing: 0.03em;
+  letter-spacing: 0.01em;
+}
 .q-marks {
   margin-left: auto; flex-shrink: 0; align-self: flex-start;
   font-size: 8pt; font-weight: 700; color: #fff;
@@ -60,17 +65,17 @@ html, body {
 
 /* Options */
 .q-opts {
-  padding-left: 5mm; margin: 1mm 0;
-  display: grid; grid-template-columns: 1fr 1fr; gap: 0.5mm 6mm;
+  padding-left: 5mm; margin: 1.5mm 0;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1mm 6mm;
   font-size: 9.5pt; color: #444;
 }
-.opt { padding: 0.3mm 0; }
+.opt { padding: 0.4mm 0; line-height: 1.55; word-spacing: 0.03em; }
 
 /* Subs */
-.q-subs { padding-left: 5mm; margin: 1mm 0; font-size: 9.5pt; color: #444; }
-.q-sub { margin: 0.5mm 0; display: flex; gap: 2mm; align-items: flex-start; }
+.q-subs { padding-left: 5mm; margin: 1.5mm 0; font-size: 9.5pt; color: #444; }
+.q-sub { margin: 1mm 0; display: flex; gap: 2mm; align-items: flex-start; }
 .sub-lbl { font-weight: 700; color: #b34d00; flex-shrink: 0; }
-.sub-txt { flex: 1; }
+.sub-txt { flex: 1; line-height: 1.65; word-spacing: 0.03em; }
 .sub-mk { flex-shrink: 0; color: #888; font-size: 9pt; }
 .or-bar { font-weight: 800; font-size: 9pt; color: #fe6e00; letter-spacing: .15em;
   text-align: center; margin: 1.5mm 0 1mm; }
@@ -93,7 +98,8 @@ html, body {
 .steps { }
 .step {
   display: flex; gap: 2mm; align-items: flex-start;
-  margin: 1mm 0; font-size: 10pt; line-height: 1.5;
+  margin: 1.5mm 0; font-size: 10pt; line-height: 1.65;
+  word-spacing: 0.03em;
 }
 .step-n { font-weight: 700; color: #3b82f6; flex-shrink: 0; min-width: 12pt; }
 .step-txt { flex: 1; }

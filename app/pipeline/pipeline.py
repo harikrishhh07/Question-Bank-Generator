@@ -121,6 +121,7 @@ def process_document(db: Session, document: Document, source_path: Path) -> dict
 
         # ---- Persist questions ----
         db.query(Question).filter(Question.document_id == document.id).delete()
+        _clean = lambda t: postprocess.wrap_bare_math(postprocess.normalize_text_spacing(t or ""))  # noqa: E731
         for qi, q in enumerate(questions):
             media_ids = []
             for mi in assoc["question_media"].get(qi, []):
@@ -146,10 +147,10 @@ def process_document(db: Session, document: Document, source_path: Path) -> dict
                 numbering=str(q.get("number", "")),
                 title="",
                 marks=q.get("marks"),
-                text=postprocess.wrap_bare_math(q.get("text", "")),
-                options=[postprocess.wrap_bare_math(o) for o in q.get("options", [])],
+                text=_clean(q.get("text", "")),
+                options=[_clean(o) for o in q.get("options", [])],
                 subs=[
-                    {**s, "text": postprocess.wrap_bare_math(s.get("text", ""))}
+                    {**s, "text": _clean(s.get("text", ""))}
                     for s in q.get("subs", [])
                 ],
                 media_ids=media_ids,

@@ -10,7 +10,7 @@ html, body {
   font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   font-size: 11pt;
   color: #1a1a1a;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 /* ---------- WATERMARK (fixed => repeats on every printed page, behind content) ---------- */
@@ -132,7 +132,7 @@ html, body {
   page-break-inside: avoid;
 }
 .q-head { display: flex; align-items: flex-start; gap: 3mm; page-break-after: avoid; }
-.q-num { font-weight: 800; font-size: 12pt; color: #b34d00; flex-shrink: 0; line-height: 1.5; }
+.q-num { font-weight: 800; font-size: 12pt; color: #b34d00; flex-shrink: 0; line-height: 1.6; }
 .q-marks {
   margin-left: auto; flex-shrink: 0; align-self: flex-start;
   font-size: 9pt; font-weight: 700; color: #fff; background: #fe6e00;
@@ -142,19 +142,24 @@ html, body {
   font-size: 8.5pt; color: #888; font-weight: 600;
   border: 0.3mm solid #ddd; border-radius: 1mm; padding: 0.4mm 2mm;
 }
-.q-text { flex: 1; min-width: 0; page-break-inside: auto; }
+.q-text {
+  flex: 1; min-width: 0; page-break-inside: auto;
+  line-height: 1.65;
+  word-spacing: 0.03em;
+  letter-spacing: 0.01em;
+}
 .q-text :first-child { margin-top: 0; }
 
 .options {
   margin: 2mm 0 0 0; padding-left: 6mm; list-style: none;
-  display: grid; grid-template-columns: 1fr 1fr; gap: 1mm 6mm;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1.5mm 6mm;
 }
-.options li { padding: 0.5mm 0; }
+.options li { padding: 0.5mm 0; line-height: 1.55; word-spacing: 0.03em; }
 
-.subs { margin-top: 2.5mm; }
-.sub { display: flex; align-items: flex-start; gap: 2mm; margin: 1mm 0 1mm 0; padding-left: 2mm; page-break-inside: avoid; }
+.subs { margin-top: 3mm; }
+.sub { display: flex; align-items: flex-start; gap: 2mm; margin: 1.5mm 0; padding-left: 2mm; page-break-inside: avoid; }
 .sub-label { font-weight: 700; color: #b34d00; flex-shrink: 0; }
-.sub-text { flex: 1; min-width: 0; }
+.sub-text { flex: 1; min-width: 0; line-height: 1.65; word-spacing: 0.03em; }
 .sub-marks { margin-left: auto; flex-shrink: 0; color: #888; font-size: 9.5pt; }
 .or-divider {
   font-weight: 800; font-size: 10pt; color: #fe6e00;

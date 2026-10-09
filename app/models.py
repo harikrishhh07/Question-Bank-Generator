@@ -85,6 +85,7 @@ class MediaItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
     document: Mapped["Document"] = relationship(back_populates="media")
+    page: Mapped[Optional["Page"]] = relationship()
 
 
 class Question(Base):

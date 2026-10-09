@@ -194,11 +194,43 @@ def _parse_response(raw: str) -> dict:
         else:
             return {"steps": [text], "final_answer": text, "correct_option": None}
 
+    # Gemini sometimes double-encodes: json.loads returns a string that is itself JSON
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except json.JSONDecodeError:
+            return {"steps": [data], "final_answer": data, "correct_option": None}
+
     steps = data.get("steps") or []
     if isinstance(steps, str):
         steps = [steps]
 
+    # Detect double-wrapped content: steps is a 1-element list whose sole entry
+    # is itself a JSON object string (the whole response got stored as a step).
+    if (len(steps) == 1 and isinstance(steps[0], str)
+            and steps[0].strip().startswith('{')):
+        try:
+            inner = json.loads(steps[0])
+            if isinstance(inner, dict) and ("steps" in inner or "final_answer" in inner):
+                data = inner
+                steps = data.get("steps") or []
+                if isinstance(steps, str):
+                    steps = [steps]
+        except json.JSONDecodeError:
+            pass
+
     final = data.get("final_answer") or (steps[-1] if steps else "")
+
+    # If final_answer is itself a JSON blob, unwrap it
+    if isinstance(final, str) and final.strip().startswith('{'):
+        try:
+            inner = json.loads(final)
+            if isinstance(inner, dict):
+                final = inner.get("final_answer") or final
+                if not steps:
+                    steps = inner.get("steps") or []
+        except json.JSONDecodeError:
+            pass
 
     return {
         "steps": [_fix_latex_escaping(str(s)) for s in steps],

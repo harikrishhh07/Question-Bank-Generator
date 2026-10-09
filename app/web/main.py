@@ -416,8 +416,7 @@ def generate_answerkey(cid: int, payload: dict = None, db: Session = Depends(get
 @app.get("/api/answers/{cid}")
 def collection_answers(cid: int, db: Session = Depends(get_session)):
     """Answers for all questions in a collection (with the bank numbering)."""
-    from app.generation.context import _group_questions
-    from app.models import Answer
+    from ..generation.context import _group_questions
 
     questions = (
         db.query(Question)
@@ -451,8 +450,6 @@ def collection_answers(cid: int, db: Session = Depends(get_session)):
 @app.post("/api/questions/{qid}/answer")
 def update_answer(qid: int, payload: dict, db: Session = Depends(get_session)):
     """Manually set / edit the answer for a question."""
-    from app.models import Answer
-
     q = db.query(Question).filter(Question.id == qid).first()
     if not q:
         raise HTTPException(404)

@@ -4,6 +4,162 @@ import re
 
 LABEL_RE = re.compile(r"^\s*(\(?[a-zA-Z][a-zA-Z0-9.]*\)?[\.\)])\s*(.*)$", re.S)
 _HEADER_RE = re.compile(r"(\d+)\s*[x×X]\s*(\d+)\s*=")
+
+# ---- Text spacing normalisation ----
+# Matches a run of single characters separated by single spaces, e.g.
+# "d i f f e r e n t i a t e" — an OCR artefact where the scanner treats each
+# glyph as its own word.  We detect such runs and collapse them.
+_SPACED_WORD_RE = re.compile(
+    r"(?:^|(?<=\s))"        # start of string or after whitespace
+    r"([A-Za-z0-9]"         # first isolated character
+    r"(?:\s[A-Za-z0-9]){2,})"  # followed by 2+ more "space char" pairs
+    r"(?=\s|$)"             # end of string or followed by whitespace
+)
+
+
+def _collapse_run(m: re.Match) -> str:
+    """Remove the spaces from a matched isolated-character run."""
+    return m.group(1).replace(" ", "")
+
+
+# Known fused phrases that appear in exam question OCR output.
+# Each entry maps the exact fused string -> the correctly spaced version.
+# Longer entries must come before shorter ones so we replace the most specific first.
+_FUSED_PHRASE_MAP: list[tuple[re.Pattern, str]] = [
+    # "c so that the vector / function / …" variants
+    (re.compile(r'\bcsothatthevector\b', re.I), 'c so that the vector'),
+    (re.compile(r'\bcsothatthe\b', re.I), 'c so that the'),
+    (re.compile(r'\bcsothat\b', re.I), 'c so that'),
+    (re.compile(r'\bsothatthe\b', re.I), 'so that the'),
+    (re.compile(r'\bsothat\b', re.I), 'so that'),
+    # "onto the point …"
+    (re.compile(r'\bontothepointw\b', re.I), 'onto the point w'),
+    (re.compile(r'\bontothepoint\b', re.I), 'onto the point'),
+    (re.compile(r'\bontothe\b', re.I), 'onto the'),
+    (re.compile(r'\bontoto\b', re.I), 'onto to'),
+    # "expand as Laurent's series about z"
+    (re.compile(r"expandasLaurent'sseriesabout", re.I), "expand as Laurent's series about"),
+    (re.compile(r"expandsasLaurent'sseriesabout", re.I), "expands as Laurent's series about"),
+    (re.compile(r'expandasLaurentseriesabout', re.I), "expand as Laurent's series about"),
+    (re.compile(r'\bexpandas\b', re.I), 'expand as'),
+    (re.compile(r'\bseriesabout\b', re.I), 'series about'),
+    (re.compile(r'\baboutz\b', re.I), 'about z'),
+    (re.compile(r'\baboutw\b', re.I), 'about w'),
+    # "where c is the circle / region"
+    (re.compile(r'\bwherecisthecircle\b', re.I), 'where c is the circle'),
+    (re.compile(r'\bwherecisthe\b', re.I), 'where c is the'),
+    (re.compile(r'\bwherecis\b', re.I), 'where c is'),
+    # "where u …" / "where u - v" etc  (single trailing letter)
+    (re.compile(r'\bwhereu\b', re.I), 'where u'),
+    (re.compile(r'\bwherev\b', re.I), 'where v'),
+    # "dz where c is"
+    (re.compile(r'\bdzwhere\b', re.I), 'dz where'),
+    # generic "where the / where a / where it"
+    (re.compile(r'\bwherethe\b', re.I), 'where the'),
+    (re.compile(r'\bwherethere\b', re.I), 'where there'),
+    # "valid in" / "valid for"
+    (re.compile(r'\bvalidin\b', re.I), 'valid in'),
+    (re.compile(r'\bvalidfor\b', re.I), 'valid for'),
+    # "find the" / "show that" at word start after boundary
+    (re.compile(r'\bfindthe\b', re.I), 'find the'),
+    (re.compile(r'\bshowthat\b', re.I), 'show that'),
+    (re.compile(r'\bsuchthat\b', re.I), 'such that'),
+    (re.compile(r'\bgiven that\b', re.I), 'given that'),
+    (re.compile(r'\bgiventhat\b', re.I), 'given that'),
+    # "also find" / "also show"
+    (re.compile(r'\balsofind\b', re.I), 'also find'),
+    (re.compile(r'\balsoshow\b', re.I), 'also show'),
+]
+
+
+def _split_fused_words(text: str) -> str:
+    """Replace known fused word sequences with correctly spaced versions.
+
+    Uses a fixed lookup table of phrases commonly fused in exam OCR output.
+    Conservative by design — only fixes known patterns to avoid mangling
+    legitimate technical terms (e.g. 'irrotational', 'conservative').
+    """
+    for pattern, replacement in _FUSED_PHRASE_MAP:
+        text = pattern.sub(replacement, text)
+    return text
+
+
+def normalize_text_spacing(text: str) -> str:
+    """Normalize spacing issues in OCR-extracted question text.
+
+    1. Collapse character-fragmented words ('d i f f e r e n t i a t e' -> 'differentiate').
+    2. Insert space at word/math boundaries: 'ontothepointw\\(' -> 'onto the point w \\('.
+    3. Collapse multiple consecutive spaces into one.
+    4. Remove stray spaces immediately before punctuation.
+    5. Ensure a single space after commas, colons, semicolons when missing.
+    6. Strip leading/trailing whitespace.
+    Math delimiters (\\( ... \\)) are left untouched.
+    """
+    if not text:
+        return text
+
+    # ── Pass 1: insert space between closing math delimiter and a following word ──
+    # e.g. \)ontothepointw  →  \) onto the point w
+    # e.g. \)whereu         →  \) where u
+    text = re.sub(r'(\\\))([A-Za-z])', r'\1 \2', text)
+    # insert space between a word/digit and an opening math delimiter
+    # e.g. csothatthevector\(  →  cso that the vector \(
+    text = re.sub(r'([A-Za-z0-9])(\\\()', r'\1 \2', text)
+    # also handle \] and \[
+    text = re.sub(r'(\\\])([A-Za-z])', r'\1 \2', text)
+    text = re.sub(r'([A-Za-z0-9])(\\\[)', r'\1 \2', text)
+
+    def _process_plain(segment: str) -> str:
+        # Step 1: collapse isolated-character runs (e.g. "d i f f e r")
+        segment = _SPACED_WORD_RE.sub(_collapse_run, segment)
+        # Step 2: split run-together words using camelCase/word-boundary heuristic.
+        # Handles "ontothepointw", "expandasLaurent", "csothatthevector" etc.
+        # Strategy: insert a space before each uppercase letter in the middle of a
+        # lower→upper transition, and before common English function words when
+        # they appear as a prefix of a longer string.
+        segment = _split_fused_words(segment)
+        # Step 3: multiple spaces -> one
+        segment = re.sub(r" {2,}", " ", segment)
+        # Step 4: remove space before punctuation
+        segment = re.sub(r" +([,;:!?.\)\]])", r"\1", segment)
+        # Step 5: add space after punctuation if missing
+        segment = re.sub(r"([,;:])(?=[^\s\\])", r"\1 ", segment)
+        return segment
+
+    # Split around math regions to leave LaTeX untouched
+    parts: list[tuple[str, str]] = []
+    i = 0
+    n = len(text)
+    while i < n:
+        found_math = False
+        for open_d, close_d in (("\\(", "\\)"), ("\\[", "\\]")):
+            if text.startswith(open_d, i):
+                end = text.find(close_d, i + len(open_d))
+                if end != -1:
+                    parts.append(("math", text[i : end + len(close_d)]))
+                    i = end + len(close_d)
+                    found_math = True
+                    break
+        if found_math:
+            continue
+        j = i + 1
+        while j < n:
+            hit = False
+            for open_d, _ in (("\\(", "\\)"), ("\\[", "\\]")):
+                if text.startswith(open_d, j):
+                    hit = True
+                    break
+            if hit:
+                break
+            j += 1
+        parts.append(("plain", text[i:j]))
+        i = j
+
+    result = "".join(
+        seg if kind == "math" else _process_plain(seg)
+        for kind, seg in parts
+    )
+    return result.strip()
 PART_RE = re.compile(r"PART\s*[-–—:]?\s*([A-Ca-c])\s*")
 MAX_MARKS_RE = re.compile(r"Max\.?\s*Marks?\s*[:–—]?\s*(\d+)", re.I)
 _NUM_PREFIX_RE = re.compile(r"^\s*\d+\s*[\.\)]\s*")

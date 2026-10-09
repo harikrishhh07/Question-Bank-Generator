@@ -85,16 +85,22 @@ def run_job(job: Job) -> None:
 
 
 def worker_loop(once: bool = False, poll_seconds: float = 2.0) -> None:
+    # Startup: reset any jobs left in 'running' state from a prior crash.
     db = SessionLocal()
     try:
-        # On startup, reset any jobs left in 'running' state from a prior crash
         stuck = db.query(Job).filter(Job.status == "running").all()
         for j in stuck:
             j.status = "queued"
         if stuck:
             db.commit()
+    finally:
+        db.close()
 
-        while True:
+    while True:
+        # Open a fresh session each poll cycle — a single long-lived session
+        # can go stale after the first job runs (SQLite WAL / connection timeout).
+        db = SessionLocal()
+        try:
             job = (
                 db.query(Job)
                 .filter(Job.status.in_(["queued"]))
@@ -103,13 +109,15 @@ def worker_loop(once: bool = False, poll_seconds: float = 2.0) -> None:
             )
             if job:
                 db.expunge(job)
-                run_job(job)
-            else:
-                if once:
-                    break
-                time.sleep(poll_seconds)
-    finally:
-        db.close()
+        finally:
+            db.close()
+
+        if job:
+            run_job(job)
+        else:
+            if once:
+                break
+            time.sleep(poll_seconds)
 
 
 if __name__ == "__main__":

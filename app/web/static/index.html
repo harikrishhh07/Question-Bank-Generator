@@ -474,7 +474,8 @@ hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
     <div class="split-left" style="width:340px">
       <div class="gen-section">
         <div class="gen-section-title">Collection</div>
-        <select id="gen-collection"></select>
+        <select id="gen-collection" onchange="autoFillGenMeta(parseInt(this.value))"></select>
+        <div id="gen-col-hint" style="font-size:11px;color:var(--text-muted);margin-top:4px"></div>
       </div>
 
       <div class="gen-section">

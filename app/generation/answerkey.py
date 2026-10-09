@@ -5,11 +5,12 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from ..config import BASE_DIR, settings
+from ..config import settings
 from ..models import Answer, Collection, Document, QbGeneration, Question
 from ..storage import storage
 from . import document
-from .context import _group_questions
+from .context import _file_url_or_none, _group_questions
+from .document import _resolve_watermark
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
@@ -102,23 +103,4 @@ def _first_nonempty(items: list, field: str):
         v = getattr(item, field, None)
         if v:
             return v
-    return None
-
-
-def _resolve_watermark(config: dict) -> tuple[str | None, dict]:
-    wm = config.get("watermark") or {}
-    image = wm.get("image") or settings.watermark_image or ""
-    if image:
-        p = Path(image)
-        if not p.is_absolute():
-            p = BASE_DIR / p
-        if p.exists():
-            return p.resolve().as_uri(), wm
-    return None, wm
-
-
-def _file_url_or_none(path: str):
-    p = BASE_DIR / path
-    if p.exists():
-        return p.resolve().as_uri()
     return None

@@ -65,7 +65,11 @@ document.querySelectorAll(".tab").forEach((tb) => {
     document.querySelectorAll(".tab-pane").forEach((x) => x.classList.add("hidden"));
     tb.classList.add("active");
     $("tab-" + tb.dataset.tab).classList.remove("hidden");
-    if (tb.dataset.tab === "collections") refreshCollections();
+    if (tb.dataset.tab === "collections") {
+      refreshCollections();
+      // Restart the document poll if a collection is selected
+      if (state.collectionId) startDocPoll(state.collectionId);
+    }
     if (tb.dataset.tab === "review")      refreshReview();
     if (tb.dataset.tab === "generate")    refreshGenerate();
     if (tb.dataset.tab === "jobs")        refreshJobs();
@@ -78,10 +82,19 @@ document.querySelectorAll(".tab").forEach((tb) => {
 async function refreshCollections() {
   state.collections = await api("/api/collections");
   renderCollectionList();
-  // Update generate dropdown too
+  // Update generate dropdown too, preserving current selection
   const sel = $("gen-collection");
-  if (sel) sel.innerHTML = state.collections.map(
-    c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+  if (sel) {
+    const prevVal = sel.value;
+    sel.innerHTML = state.collections.map(
+      c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+    if (prevVal && state.collections.some(c => String(c.id) === prevVal)) {
+      sel.value = prevVal;
+    } else {
+      const withDocs = state.collections.find(c => c.document_count > 0);
+      if (withDocs) sel.value = String(withDocs.id);
+    }
+  }
 }
 
 function renderCollectionList() {
@@ -162,7 +175,7 @@ function renderColDetail(col) {
       </div>
     </div>
     ${processing > 0 ? `<div class="info-box warn" style="margin-bottom:12px">
-      ⏳ ${processing} paper${processing>1?"s":""} processing… <a href="#" onclick="switchTab('jobs');return false">View Jobs</a>
+      ⏳ ${processing} paper${processing>1?"s":""} processing… <button class="btn sm amber" onclick="switchTab('jobs')" style="margin-left:6px">View Jobs</button>
     </div>` : ""}
     <div class="stats-row">
       <div class="stat-chip"><div class="stat-val">${total}</div><div class="stat-lbl">Papers</div></div>
@@ -245,9 +258,10 @@ async function uploadFiles(files) {
     const r = await api("/api/collections/" + state.collectionId + "/documents", {method:"POST",body:fd});
     statusEl.textContent = `✓ ${r.uploaded.length} file(s) uploaded. Processing started.`;
     statusEl.className = "status-msg ok";
-    toast(`${r.uploaded.length} paper(s) queued for processing`);
+    toast(`${r.uploaded.length} paper(s) queued — processing in background`);
     await refreshColDocuments();
-    switchTab("jobs");
+    // Restart poll (it may have been stopped if previous docs were all done)
+    startDocPoll(state.collectionId);
   } catch (e) {
     statusEl.textContent = "Upload failed: " + e.message;
     statusEl.className = "status-msg err";
@@ -291,17 +305,23 @@ function reviewDoc(did) {
 function startDocPoll(cid) {
   clearInterval(state._pollTimer);
   state._pollTimer = setInterval(async () => {
+    // Stop polling only if the collection was changed, not on tab-switch
     if (state.collectionId !== cid) return clearInterval(state._pollTimer);
     try {
       const d = await api("/api/collections/" + cid);
+      const hasInProgress = d.documents.some(x => ["pending","processing","running"].includes(x.status));
       const changed = d.documents.some((nd, i) => {
         const od = (state.docs || [])[i];
         return !od || nd.status !== od.status || nd.question_count !== od.question_count;
       });
-      if (changed || d.documents.some(x => ["pending","processing","running"].includes(x.status))) {
+      if (changed || hasInProgress) {
         state.docs = d.documents;
-        renderColDetail(d);
+        // Only re-render collection detail if we're on the collections tab
+        const onCollections = !$("tab-collections").classList.contains("hidden");
+        if (onCollections) renderColDetail(d);
       }
+      // Stop polling once all docs are in a terminal state
+      if (!hasInProgress) clearInterval(state._pollTimer);
     } catch (_) {}
   }, 5000);
 }
@@ -312,23 +332,29 @@ function startDocPoll(cid) {
 async function refreshReview() {
   try {
     const cols = await api("/api/collections");
-    // Build flat doc list across all collections
+    // Fetch all collection details in parallel instead of serially
+    const colDetails = await Promise.all(cols.map(c => api("/api/collections/" + c.id)));
     const allDocs = [];
-    for (const c of cols) {
-      const cd = await api("/api/collections/" + c.id);
-      cd.documents.filter(d => d.status === "done").forEach(d => {
+    cols.forEach((c, i) => {
+      colDetails[i].documents.filter(d => d.status === "done").forEach(d => {
         allDocs.push({...d, colName: c.name});
       });
-    }
+    });
     const sel = $("rv-doc-select");
     if (!allDocs.length) {
       sel.innerHTML = `<option value="">— No processed papers —</option>`;
+      $("rv-qlist").innerHTML = `<div class="empty-state"><div class="es-icon">📋</div>
+        <div class="es-title">No questions yet</div>
+        <div class="es-sub">Upload &amp; process a PDF in the Collections tab first</div></div>`;
       return;
     }
     sel.innerHTML = allDocs.map(d =>
       `<option value="${d.id}" ${d.id === state.rvDocId ? "selected" : ""}>${esc(d.filename)} (${esc(d.subject_code || d.colName)})</option>`
     ).join("");
-    const targetId = state.rvDocId || allDocs[0].id;
+    // Load the previously selected doc or default to the first
+    const targetId = (state.rvDocId && allDocs.find(d => d.id === state.rvDocId))
+      ? state.rvDocId
+      : allDocs[0].id;
     await loadRvDoc(targetId);
   } catch (e) { toast(e.message, "err"); }
 }
@@ -669,11 +695,48 @@ async function refreshGenerate() {
     const cols = await api("/api/collections");
     state.collections = cols;
     const sel = $("gen-collection");
-    sel.innerHTML = cols.length
-      ? cols.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("")
-      : `<option value="">— No collections —</option>`;
+    if (!cols.length) {
+      sel.innerHTML = `<option value="">— No collections —</option>`;
+    } else {
+      const prevVal = sel.value;
+      sel.innerHTML = cols.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+      // Preserve existing selection if still valid
+      if (prevVal && cols.some(c => String(c.id) === prevVal)) {
+        sel.value = prevVal;
+      } else {
+        // Default to first collection that has documents; fall back to first entry
+        const withDocs = cols.find(c => c.document_count > 0);
+        if (withDocs) sel.value = String(withDocs.id);
+      }
+    }
+    // Auto-fill metadata from the selected collection
+    await autoFillGenMeta(parseInt(sel.value));
   } catch (_) {}
   await refreshBankList();
+}
+
+async function autoFillGenMeta(cid) {
+  if (!cid) return;
+  try {
+    const col = await api("/api/collections/" + cid);
+    const docs = (col.documents || []).filter(d => d.status === "done");
+    const hint = $("gen-col-hint");
+    if (!docs.length) {
+      if (hint) hint.textContent = "⚠ No processed documents in this collection";
+      return;
+    }
+    const totalDocs = col.documents ? col.documents.length : 0;
+    if (hint) hint.textContent = `${docs.length} processed paper${docs.length !== 1 ? "s" : ""} · ${totalDocs} total`;
+    const d = docs[0];
+    if (d.subject_name && !$("gen-subject-name").value)
+      $("gen-subject-name").value = d.subject_name;
+    if (d.subject_code && !$("gen-subject-code").value)
+      $("gen-subject-code").value = d.subject_code;
+    if (d.semester && !$("gen-semester").value)
+      $("gen-semester").value = d.semester;
+    if (d.degree && !$("gen-course").value)
+      $("gen-course").value = d.degree;
+  } catch (_) {}
 }
 
 async function refreshBankList() {
