@@ -91,13 +91,48 @@ def generate_pdf(html: str, output_path: Path, logo_url: str | None = None, subj
         tmp_html.unlink(missing_ok=True)
 
 
+def _logo_data_uri(logo_url: str | None) -> str:
+    """Convert a file:// logo URL to a base64 data URI.
+
+    Playwright's header/footer template runs in an isolated print context that
+    cannot load file:// URIs, so we embed the image inline as a data URI.
+    """
+    if not logo_url:
+        return ""
+    try:
+        import base64
+        from urllib.request import urlopen
+        from urllib.parse import urlparse
+        parsed = urlparse(logo_url)
+        if parsed.scheme == "file":
+            # Convert file:// URI → local path
+            from urllib.request import url2pathname
+            local_path = Path(url2pathname(parsed.path))
+        else:
+            return logo_url  # non-file URL, use as-is and hope for the best
+        if not local_path.exists():
+            return ""
+        data = base64.b64encode(local_path.read_bytes()).decode("ascii")
+        suffix = local_path.suffix.lower().lstrip(".")
+        mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+                "gif": "image/gif", "svg": "image/svg+xml"}.get(suffix, "image/png")
+        return f"data:{mime};base64,{data}"
+    except Exception:
+        return ""
+
+
 def _header_html(logo_url: str | None, subject: str) -> str:
-    logo = logo_url or ""
+    # Embed logo as base64 — Playwright print headers cannot load file:// URIs
+    logo_data = _logo_data_uri(logo_url)
+    logo_img = (
+        f'<img src="{logo_data}" style="height:6mm;width:auto;object-fit:contain;display:block;">'
+        if logo_data else ""
+    )
     return f"""<div style="width:100%;height:10mm;padding:0 16mm;display:flex;align-items:center;justify-content:space-between;
         border-bottom:0.4mm solid #fe6e00;font-family:'Segoe UI',Arial,sans-serif;background:#ffffff;
         font-size:9pt;color:#555;">
         <div style="display:flex;align-items:center;gap:3mm;">
-            <img src="{logo}" style="height:5mm;width:5mm;object-fit:contain;" onerror="this.style.display='none'">
+            {logo_img}
             <span style="font-weight:800;letter-spacing:0.08em;color:#fe6e00;font-size:9.5pt;">STUDIQUE</span>
         </div>
         <div style="font-weight:600;text-align:right;font-size:8pt;">{subject}</div>
